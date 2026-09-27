@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#080B16" />
+<title>明路 · Akari 灯塔推理</title>
+<meta name="description" content="Akari 灯塔谜题：每局唯一解、每局都能用逻辑推到底，提示只给可推导的格。" />
+<link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>明路</h1>
+      <p class="sub">Akari · 灯塔推理</p>
+    </div>
+    <div class="top-actions">
+      <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
+      <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-menu" class="view">
+      <div class="menu-hero">
+        <h2>把整片夜色照亮，但不让两盏灯照面</h2>
+        <p>
+          灯沿直线照亮整条走廊，墙会挡光；两盏灯不能在同一条直线上互相照到。
+          墙上的数字写着它四邻放了几盏灯。这里没有运气题——每一局都能靠逻辑推到底。
+        </p>
+      </div>
+
+      <div class="menu-cols">
+        <div class="col">
+          <h3 class="col-title">选一档</h3>
+          <div id="tier-list" class="tiers"></div>
+          <div id="resume-card" class="resume" hidden>
+            <div class="resume-txt">
+              <strong id="resume-name">未完成的牌局</strong>
+              <span id="resume-meta"></span>
+            </div>
+            <button id="btn-resume" class="primary" type="button">继续</button>
+          </div>
+        </div>
+
+        <div class="col">
+          <h3 class="col-title">纪录（同档比：先看不求提示几次，再看步数，最后看时间）</h3>
+          <ul id="record-list" class="records"></ul>
+
+          <h3 class="col-title">你会用到的六条规则</h3>
+          <ol class="rules">
+            <li><b>线索凑满</b>：还差的灯数正好等于还能放的格数，那些格全是灯。</li>
+            <li><b>线索闭合</b>：数字已经满足，其余邻格一律不能放。</li>
+            <li><b>线索成组</b>：共邻的几处线索是一份约束，能同时满足的摆法只有一种。</li>
+            <li><b>灯光直照</b>：一盏灯照亮整条线，这条线上再放不下第二盏。</li>
+            <li><b>唯一光源</b>：有个空格只剩一处能照到它，那处必是灯。</li>
+            <li><b>反证</b>：假设这里放灯（或不放）会让盘面矛盾，假设就反了。</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-game" class="view" hidden>
+      <div class="stage">
+        <div class="stage-head">
+          <span id="stat-name" class="puzzle-name">—</span>
+          <span id="stat-tier" class="chip">—</span>
+          <span id="stat-time" class="chip mono">00:00</span>
+        </div>
+        <div id="board-wrap">
+          <canvas id="board" role="img" aria-label="灯棋盘：墙上有数字，格子里放灯或画叉"></canvas>
+          <div id="win-veil" hidden>
+            <div class="win-card">
+              <h3>整片亮了</h3>
+              <p id="win-meta"></p>
+              <p id="win-record" class="win-record"></p>
+              <div class="win-actions">
+                <button id="btn-again" class="primary" type="button">再来一局</button>
+                <button id="btn-menu-2" class="ghost" type="button">回选档</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="conflict-line" class="conflict-line" aria-live="polite"></p>
+      </div>
+
+      <aside class="panel">
+        <div class="modes" role="group" aria-label="落子模式">
+          <button id="btn-mode-bulb" class="mode" type="button" aria-pressed="true">放灯</button>
+          <button id="btn-mode-mark" class="mode" type="button" aria-pressed="false">画叉</button>
+        </div>
+        <div class="acts">
+          <button id="btn-hint" class="primary" type="button">提示<span class="mono" id="hint-count">0</span></button>
+          <button id="btn-undo" class="ghost" type="button">撤销</button>
+          <button id="btn-new" class="ghost" type="button">换一局</button>
+          <button id="btn-menu" class="ghost" type="button">回选档</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span>步数</span><b id="stat-moves" class="mono">0</b></div>
+          <div class="stat"><span>提示</span><b id="stat-hints" class="mono">0</b></div>
+          <div class="stat"><span>灯</span><b id="stat-bulbs" class="mono">0</b></div>
+          <div class="stat"><span>冲突</span><b id="stat-conflicts" class="mono">0</b></div>
+          <div class="stat"><span>没照亮的格</span><b id="stat-unlit" class="mono">0</b></div>
+          <div class="stat"><span>难度实测</span><b id="stat-score" class="mono">—</b></div>
+        </div>
+
+        <div class="hint-box">
+          <h4 id="hint-rule">提示理由</h4>
+          <p id="hint-line">按 <b>提示</b> 会说出当前能推的一步，以及它依据哪条规则。</p>
+        </div>
+
+        <div class="legend">
+          <span><i class="sw sw-lamp"></i>灯</span>
+          <span><i class="sw sw-glow"></i>被照亮的线</span>
+          <span><i class="sw sw-cross"></i>铅笔叉</span>
+          <span><i class="sw sw-dark"></i>还没照亮</span>
+          <span><i class="sw sw-bad"></i>冲突</span>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span>每局唯一解 · 每局可用逻辑推出 · 提示只给可推导的格 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>
+    <button id="btn-reset" class="link" type="button">清空存档</button>
+  </footer>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
