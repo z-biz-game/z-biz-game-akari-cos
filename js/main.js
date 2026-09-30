@@ -488,6 +488,16 @@ if (!('PointerEvent' in window)) {
   el.canvas.addEventListener('touchmove', (ev) => strokeMove(asPoint(ev)), noScroll);
   el.canvas.addEventListener('touchend', strokeEnd);
   el.canvas.addEventListener('touchcancel', cancelStroke);
+  // 老桌面 Safari（12 及以前）既没有 PointerEvent 也不能触摸，鼠标是它唯一的输入。
+  // 按"有没有触摸能力"二选一：两个都挂的话，触摸结束后补发的 compatibility mousedown
+  // 会把同一笔触摸算成两笔。move/up 挂 window——鼠标没有 setPointerCapture，
+  // 只在画布内监听的话，拖出格子再在画布外松手就永远落不下去。
+  const hasTouch = 'ontouchstart' in window || (navigator.maxTouchPoints || 0) > 0;
+  if (!hasTouch) {
+    el.canvas.addEventListener('mousedown', (ev) => strokeStart(asPoint(ev)));
+    window.addEventListener('mousemove', (ev) => strokeMove(asPoint(ev)));
+    window.addEventListener('mouseup', strokeEnd);
+  }
 }
 el.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
 
