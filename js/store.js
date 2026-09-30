@@ -3,6 +3,8 @@
 // the wall pattern or the solution — the generator is deterministic, so the board never has
 // to travel through storage and a save stays a few hundred bytes even on 12×12.
 
+import { TIERS } from './engine/generate.js';
+
 const KEY = 'akari.save.v1';
 
 const defaults = () => ({
@@ -16,6 +18,9 @@ const defaults = () => ({
 // 坏一条就丢那一条，其余照用——一坨垃圾 localStorage 不该把整局冻在启动画面。
 const MAX_CELLS = 12 * 12; // 最大档位 12×12，超过的一律当噪声
 const CELL_STATE = new Set([0, 1, 2]);
+// 档位名以生成器为准，不在这里重列一遍。改名/撤档的旧档必须在这里就被认出读不懂，
+// 否则 makePuzzle 的 tierById 会悄悄退回第一档，把 12×12 的大师局续成 8×8 的见习局。
+const TIER_IDS = new Set(TIERS.map((t) => t.id));
 
 const isInt = (v) => typeof v === 'number' && Number.isFinite(v) && Math.floor(v) === v;
 
@@ -75,13 +80,17 @@ function sanitizeInk(v) {
 }
 
 function sanitizeResume(v, junk) {
-  if (!plain(v)) return null;
+  if (!plain(v)) {
+    if (v != null) junk.push('resume');
+    return null;
+  }
   const seed = str(v.seed, 64);
   const tier = str(v.tier, 24);
   const cells = v.cells;
   const ink = sanitizeInk(v.ink);
-  if (!seed || !tier || !isInt(cells) || cells < 1 || cells > MAX_CELLS || !ink) {
-    junk.push('resume');
+  const badTier = !!tier && !TIER_IDS.has(tier);
+  if (!seed || !tier || badTier || !isInt(cells) || cells < 1 || cells > MAX_CELLS || !ink) {
+    junk.push(badTier ? 'resume.tier' : 'resume');
     return null;
   }
   return {
