@@ -6,11 +6,10 @@
 //      发出去的 HTML 会配上上一版的 js/css，出一个"新界面配旧逻辑"的鬼状态，
 //      而且玩家自己无法恢复（只能等缓存过期）。这个仓走 GitHub Pages，改版频繁，
 //      所以宁可牺牲一次离线首屏，也不把代码钉死。
-//   2) 缓存名带版本号：只有**资产**（图标/纹理/字体类不可变文件）可以缓存优先，
-//      改图必然同时改文件名或 VERSION；js/css/html 则全走网络优先。
+//   2) 缓存名带版本号（activate 时清掉非本版的名字）。改版**不需要**同步 bump：
+//      同名文件重绘之后，网络优先这一条保证客户端下一次联网就拿到新字节。
 const VERSION = 'akari-v1';
 const CACHE = `${VERSION}-shell`;
-const DATA = `${VERSION}-data`;
 const PRECACHE = ['index.html', 'manifest.webmanifest'];
 
 self.addEventListener('install', (ev) => {
@@ -29,27 +28,15 @@ self.addEventListener('activate', (ev) => {
   );
 });
 
-// 位图资产是不可变的（改了图就等于改了文件名/版本），它们才配 cache-first。
-const IMMUTABLE = /\.(png|jpg|jpeg|webp|svg|woff2?)$/i;
-
+// 位图也走网络优先：assets/gen/make_art.py 重绘时写的是**同一批文件名**，
+// 而 VERSION 是手写的常量——没人保证改版时同步 bump 它。cache-first 于是会让
+// 已装过的客户端永远读到旧图，而且玩家自己恢复不了。离线的兜底并不依赖 cache-first：
+// 下面的 catch 用 caches.match，它跨全部缓存名查，回填进 CACHE 的图照样命中。
 self.addEventListener('fetch', (ev) => {
   const req = ev.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
-
-  if (IMMUTABLE.test(url.pathname)) {
-    ev.respondWith(
-      caches.open(DATA).then(async (c) => {
-        const hit = await c.match(req);
-        if (hit) return hit;
-        const res = await fetch(req);
-        if (res && res.ok) c.put(req, res.clone());
-        return res;
-      })
-    );
-    return;
-  }
 
   ev.respondWith(
     fetch(req)
