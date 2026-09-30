@@ -463,15 +463,32 @@ function strokeEnd() {
   return step;
 }
 
-el.canvas.addEventListener('pointerdown', strokeStart);
-el.canvas.addEventListener('pointermove', strokeMove);
-el.canvas.addEventListener('pointerup', strokeEnd);
-el.canvas.addEventListener('pointercancel', () => {
+function cancelStroke() {
   if (!stroke) return;
   unpreview();
   stroke = null;
   syncAll();
-});
+}
+
+el.canvas.addEventListener('pointerdown', strokeStart);
+el.canvas.addEventListener('pointermove', strokeMove);
+el.canvas.addEventListener('pointerup', strokeEnd);
+el.canvas.addEventListener('pointercancel', cancelStroke);
+// 老 Safari（iOS 12 及以前）没有 PointerEvent，touch 是唯一有的输入。门控而不是并行注册：
+// 两边都挂的话，同一次触摸会被算成两笔。
+if (!('PointerEvent' in window)) {
+  // strokeStart/strokeMove 读 clientX/clientY 并调 preventDefault，而 Touch 对象没有
+  // 后者——包一层，把取消默认动作交还给事件本身。
+  const asPoint = (ev) => {
+    const t = (ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]) || ev;
+    return { clientX: t.clientX, clientY: t.clientY, pointerId: 1, preventDefault: () => ev.preventDefault() };
+  };
+  const noScroll = { passive: false };
+  el.canvas.addEventListener('touchstart', (ev) => strokeStart(asPoint(ev)), noScroll);
+  el.canvas.addEventListener('touchmove', (ev) => strokeMove(asPoint(ev)), noScroll);
+  el.canvas.addEventListener('touchend', strokeEnd);
+  el.canvas.addEventListener('touchcancel', cancelStroke);
+}
 el.canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
 
 $('#btn-mode-bulb').addEventListener('click', () => setMode('bulb'));
@@ -584,13 +601,18 @@ function fullscreenSupported() {
   return !!(root.requestFullscreen || root.webkitRequestFullscreen);
 }
 
+// 禁掉要说为什么：只把按钮变灰，玩家会以为是没做完的活。
+function markFullscreenUnsupported() {
+  el.fs.disabled = true;
+  el.fs.title = '这个浏览器不提供元素全屏（iOS Safari 走主屏添加的独立模式）';
+}
+
 const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
 
 function toggleFullscreen(next) {
   const root = el.root;
   if (!fullscreenSupported()) {
-    el.fs.disabled = true;
-    el.fs.title = '这个浏览器不提供元素全屏（iOS Safari 走主屏添加的独立模式）';
+    markFullscreenUnsupported();
     return false;
   }
   const want = next === undefined ? !fsElement() : !!next;
@@ -680,7 +702,7 @@ function routeHash() {
 applyThemeVars();
 applySettings();
 renderMenu();
-if (!el.fs.disabled) el.fs.disabled = !fullscreenSupported();
+if (!fullscreenSupported()) markFullscreenUnsupported();
 syncFullscreen();
 routeHash();
 raf = requestAnimationFrame(frame);
