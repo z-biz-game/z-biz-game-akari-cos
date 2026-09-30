@@ -12,6 +12,29 @@ const defaults = () => ({
   totals: { solved: 0, hints: 0, ms: 0 },
 });
 
+// 解码分两段：第一段只管"读得回来"（JSON 没坏），第二段逐字段验明正身。
+// 坏一条就丢那一条，其余照用——一坨垃圾 localStorage 不该把整局冻在启动画面。
+const MAX_CELLS = 12 * 12; // 最大档位 12×12，超过的一律当噪声
+const CELL_STATE = new Set([0, 1, 2]);
+
+const isInt = (v) => typeof v === 'number' && Number.isFinite(v) && Math.floor(v) === v;
+
+function int(v, { min = 0, max = Number.MAX_SAFE_INTEGER, def = 0 } = {}) {
+  return isInt(v) && v >= min && v <= max ? v : def;
+}
+
+function bool(v, def) {
+  return typeof v === 'boolean' ? v : def;
+}
+
+function str(v, max) {
+  return typeof v === 'string' && v.length > 0 && v.length <= max ? v : null;
+}
+
+function plain(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
 // Cell states are 0 undetermined / 1 bulb / 2 pencil mark, and an early board is mostly 0s —
 // run-length coding is why a 144-cell save is not a 3 KB JSON array.
 function rleEncode(board) {
@@ -41,25 +64,104 @@ function rleDecode(pairs, len) {
   return b;
 }
 
+// 一段游程数组要么全合法要么整段丢掉：留一半会让右半边棋盘凭空多出灯泡。
+function sanitizeInk(v) {
+  if (!Array.isArray(v) || v.length === 0 || v.length % 2 !== 0) return null;
+  for (let p = 0; p < v.length; p += 2) {
+    if (!CELL_STATE.has(v[p])) return null;
+    if (!isInt(v[p + 1]) || v[p + 1] < 1 || v[p + 1] > 255) return null;
+  }
+  return v;
+}
+
+function sanitizeResume(v, junk) {
+  if (!plain(v)) return null;
+  const seed = str(v.seed, 64);
+  const tier = str(v.tier, 24);
+  const cells = v.cells;
+  const ink = sanitizeInk(v.ink);
+  if (!seed || !tier || !isInt(cells) || cells < 1 || cells > MAX_CELLS || !ink) {
+    junk.push('resume');
+    return null;
+  }
+  return {
+    seed,
+    tier,
+    cells,
+    ink,
+    elapsedMs: int(v.elapsedMs, { max: 100 * 60 * 60 * 1000 }),
+    moves: int(v.moves, { max: 1e6 }),
+    hints: int(v.hints, { max: 1e6 }),
+    at: int(v.at, { min: 0, max: Number.MAX_SAFE_INTEGER, def: 0 }),
+  };
+}
+
+function sanitizeBest(v, junk) {
+  const out = {};
+  if (!plain(v)) {
+    if (v != null) junk.push('best');
+    return out;
+  }
+  for (const [tier, rec] of Object.entries(v)) {
+    if (!str(tier, 24) || !plain(rec)) {
+      junk.push(`best.${tier}`);
+      continue;
+    }
+    const ms = int(rec.ms, { max: 100 * 60 * 60 * 1000, def: -1 });
+    if (ms < 0) {
+      junk.push(`best.${tier}`);
+      continue;
+    }
+    out[tier] = {
+      ms,
+      hints: int(rec.hints, { max: 1e6 }),
+      moves: int(rec.moves, { max: 1e6 }),
+      size: int(rec.size, { min: 1, max: 12, def: 8 }),
+      at: int(rec.at, { def: 0 }),
+    };
+  }
+  return out;
+}
+
+function sanitize(parsed) {
+  const junk = [];
+  const base = defaults();
+  if (!plain(parsed)) return { data: base, junk: parsed == null ? [] : ['root'] };
+  const s = plain(parsed.settings) ? parsed.settings : parsed.settings != null ? (junk.push('settings'), {}) : {};
+  const data = {
+    settings: {
+      sound: bool(s.sound, base.settings.sound),
+      reduceMotion: bool(s.reduceMotion, base.settings.reduceMotion),
+      showLight: bool(s.showLight, base.settings.showLight),
+    },
+    best: sanitizeBest(parsed.best, junk),
+    totals: {
+      solved: int(parsed.totals && parsed.totals.solved, { max: 1e7 }),
+      hints: int(parsed.totals && parsed.totals.hints, { max: 1e7 }),
+      ms: int(parsed.totals && parsed.totals.ms, { max: 1e7 * 3600 }),
+    },
+    resume: parsed.resume == null ? null : sanitizeResume(parsed.resume, junk),
+  };
+  return { data, junk };
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return defaults();
-    const parsed = JSON.parse(raw);
-    const base = defaults();
-    return {
-      ...base,
-      ...parsed,
-      settings: { ...base.settings, ...(parsed.settings || {}) },
-      totals: { ...base.totals, ...(parsed.totals || {}) },
-    };
+    if (!raw) return { data: defaults(), junk: [] };
+    return sanitize(JSON.parse(raw));
   } catch {
-    return defaults();
+    // 连 JSON 都不是：整份当垃圾，但游戏照常开局。
+    return { data: defaults(), junk: ['raw'] };
   }
 }
 
+const first = load();
+
 export const Store = {
-  data: load(),
+  data: first.data,
+  // 上次解码丢掉了哪些字段。留在原地是为了能被量到，而不是写进下一次存档。
+  junk: first.junk.slice(),
 
   save() {
     try {
@@ -133,6 +235,7 @@ export const Store = {
 
   reset() {
     this.data = defaults();
+    this.junk = [];
     this.save();
   },
 };

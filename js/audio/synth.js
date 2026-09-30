@@ -5,8 +5,23 @@
 let ctx = null;
 let master = null;
 let enabled = true;
+// 建过多少个振荡器节点，是要被实测的数：静音态下它必须一动不动。
+let nodes = 0;
+
+// 真静音 = 声卡上不再有任何东西在跑，而不是把 master 增益调到 0。
+// 只设 gain 的话，振荡器照建、音频线程照占，任何一处忘了乘增益就漏声。
+// 所以静音时 suspend()，并且 audio() 直接不返回上下文——连节点都不再新建。
+function muteContext() {
+  if (!ctx) return;
+  try {
+    if (ctx.state === 'running' && ctx.suspend) ctx.suspend().catch(() => {});
+  } catch {
+    /* 老 Safari 没有 suspend：不再新建节点这一点仍然成立 */
+  }
+}
 
 function audio() {
+  if (!enabled) return null;
   if (typeof AudioContext === 'undefined' && typeof webkitAudioContext === 'undefined') return null;
   if (!ctx) {
     const Ctor = typeof AudioContext !== 'undefined' ? AudioContext : webkitAudioContext;
@@ -32,6 +47,7 @@ function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }
   const t = ac.currentTime + delay;
   const osc = ac.createOscillator();
   const vol = ac.createGain();
+  nodes += 1;
   osc.type = type;
   osc.frequency.setValueAtTime(f0, t);
   osc.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
@@ -45,9 +61,22 @@ function tone({ f0, f1 = f0, dur = 0.12, type = 'sine', gain = 0.22, delay = 0 }
 
 export const Sound = {
   setEnabled(v) {
-    enabled = !!v;
+    const next = !!v;
+    if (next === enabled) return next;
+    enabled = next;
+    if (!enabled) {
+      muteContext();
+      return enabled;
+    }
+    // 取消静音才把上下文叫醒——这一步得发生在用户手势里（浏览器不许自动播放），
+    // 而 setEnabled 正是由"音效"按钮或 M 键触发的。
+    if (ctx && ctx.resume) ctx.resume().catch(() => {});
+    return enabled;
   },
   enabled: () => enabled,
+  // 供实测：静音态下 contextState 必须是 'suspended'，且 nodes 不再增长。
+  contextState: () => (ctx ? ctx.state : 'none'),
+  nodeCount: () => nodes,
 
   bulb() {
     tone({ f0: 520, f1: 880, dur: 0.14, type: 'triangle', gain: 0.2 });
