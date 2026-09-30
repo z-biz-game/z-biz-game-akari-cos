@@ -10,6 +10,7 @@ import * as Engine from './engine/akari.js';
 import { countSolutions } from './engine/count.js';
 import { placeBulbs, cluesFrom } from './engine/fill.js';
 import { BoardView } from './render/board.js';
+import { Fx } from './render/fx.js';
 import { Game, OPEN, BULB, MARK } from './ui/game.js';
 
 const VERSION = '1.0.0';
@@ -41,18 +42,33 @@ const el = {
   winRecord: $('#win-record'),
   wrap: $('#board-wrap'),
   canvas: $('#board'),
+  pause: $('#btn-pause'),
+  pauseVeil: $('#pause-veil'),
+  fs: $('#btn-fullscreen'),
+  help: $('#btn-help'),
+  helpView: $('#view-help'),
+  helpClose: $('#btn-help-close'),
+  helpKeys: $('#help-keys'),
+  root: document.documentElement,
 };
 
 const view = new BoardView(el.canvas);
+const fx = new Fx();
 let game = null;
-let pulse = null;
 let startedAt = 0;
 let baseElapsed = 0;
-let ticker = 0;
 let stroke = null;
+let paused = false;
+let helpOpen = false;
+let raf = 0;
+let lastFrame = 0;
+let needsRedraw = true;
+let shownTime = '';
+const stats = { frames: 0, dtSum: 0, dtMax: 0, steps: 0 };
 
 const clock = () => baseElapsed + (startedAt ? Date.now() - startedAt : 0);
 const running = () => !!startedAt;
+const markDirty = () => { needsRedraw = true; };
 
 function fmtMs(ms) {
   const s = Math.floor(ms / 1000);
@@ -68,11 +84,14 @@ function availBox() {
   };
 }
 
-function draw() {
+function draw({ resize = true } = {}) {
   if (!game) return;
-  const { w, h } = availBox();
-  view.resize(game, w, h);
-  view.draw(game, { pulse });
+  if (resize) {
+    const { w, h } = availBox();
+    view.resize(game, w, h);
+  }
+  view.draw(game, { fx });
+  needsRedraw = false;
 }
 
 // One place writes the readouts, so a stat can never be updated by half the file.
@@ -109,19 +128,38 @@ function flushResume() {
 
 function startClock() {
   startedAt = Date.now();
-  clearInterval(ticker);
-  ticker = setInterval(() => {
-    el.time.textContent = fmtMs(clock());
-    if (pulse) draw();
-  }, 1000);
 }
 
 function stopClock() {
   baseElapsed = clock();
   startedAt = 0;
-  clearInterval(ticker);
-  ticker = 0;
+  shownTime = '';
 }
+
+// 暂停 = 表停下来 + 仿真不再被喂步 + 盘面挡住不接受输入。三件事缺一件都是假暂停。
+function setPaused(next) {
+  const want = !!next && !!game && game.status !== 'won';
+  if (want === paused) return paused;
+  paused = want;
+  if (paused) {
+    if (stroke) {
+      unpreview();
+      stroke = null;
+    }
+    stopClock();
+  } else {
+    startClock();
+  }
+  fx.accum = 0;
+  el.pauseVeil.hidden = !paused;
+  el.pause.textContent = paused ? '已暂停' : '暂停';
+  el.pause.setAttribute('aria-pressed', String(paused));
+  el.viewGame.classList.toggle('paused', paused);
+  markDirty();
+  return paused;
+}
+
+const isPaused = () => paused;
 
 function setMode(mode) {
   if (!game) return;
@@ -145,11 +183,8 @@ function showHint(info) {
   }
   el.hintRule.textContent = `规则：${info.rule}`;
   el.hintLine.textContent = `${Engine.at(game.w, info.cells[0])}${info.cells.length > 1 ? ` 等 ${info.cells.length} 格` : ''} — ${info.why}`;
-  pulse = { cells: info.cells };
-  setTimeout(() => {
-    if (pulse && pulse.cells === info.cells) pulse = null;
-    draw();
-  }, 1400);
+  fx.setPulse(info.cells);
+  markDirty();
   Sound.hint();
 }
 
@@ -167,8 +202,12 @@ function onWin() {
   el.winMeta.textContent = `${game.puzzle.name} · ${game.w}×${game.h} · ${fmtMs(ms)} · ${game.moves} 步 · 提示 ${game.hints} 次`;
   el.winRecord.textContent = better ? '新纪录：这一局比存档里的更不求人。' : '未破纪录：同档先比提示次数。';
   el.winVeil.hidden = false;
+  const points = [];
+  for (const c of game.board.lightable) if (game.board.open[c] === BULB) points.push(view.cellPos(c));
+  fx.celebrate(points);
   Sound.win();
   renderRecords();
+  markDirty();
 }
 
 function afterStep(soundKey) {
@@ -199,10 +238,11 @@ function useHint() {
 }
 
 function undo() {
-  if (!game) return null;
+  if (!game || paused) return null;
   const step = game.undo();
   if (!step) return null;
-  pulse = null;
+  fx.pulse = null;
+  markDirty();
   Sound.undo();
   syncAll();
   flushResume();
@@ -214,9 +254,23 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
   const puzzle = makePuzzle(origin, tier);
   if (!puzzle) return null;
   game = new Game(puzzle);
-  pulse = null;
-  el.winVeil.hidden = true;
+  // 复位到"这一局还没开始过"：在途手势、动画缓冲、暂停态、表、读数，一样都不带走。
+  stroke = null;
+  fx.reset();
+  paused = false;
+  el.pauseVeil.hidden = true;
+  el.viewGame.classList.remove('paused');
+  el.pause.setAttribute('aria-pressed', 'false');
+  el.pause.textContent = '暂停';
   baseElapsed = 0;
+  shownTime = '';
+  setHelp(false);
+  if (resume && resume.cells !== puzzle.w * puzzle.h) {
+    // 盘面是从 seed + tier 重新长出来的。存档格数与长出来的对不上时，墨点索引会落在
+    // 错的格子上——宁可不继续，也不能摆错一子。
+    Store.junk.push('resume.geometry');
+    resume = null;
+  }
   if (resume) {
     game.moves = resume.moves || 0;
     game.hints = resume.hints || 0;
@@ -231,7 +285,16 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
   syncAll();
   flushResume();
   renderResumeCard();
+  markDirty();
   return game;
+}
+
+// 重开本局：还是同一张盘面（生成器按 origin seed 决定，所以墙与数字一模一样），
+// 但落子、步数、提示、用时、动画全部归零。与"换一局"是两件事。
+function restart() {
+  if (!game) return null;
+  const { tier, originSeed } = game.puzzle;
+  return begin({ tier, seed: originSeed });
 }
 
 function show(which) {
@@ -245,7 +308,30 @@ function show(which) {
   return which;
 }
 
+// 教学页里的键盘表由这一张表渲染：键位改在 KEYS 上，忘了改这里就会说谎。
+const KEY_LABELS = [
+  ['Enter', '菜单里开始 / 有存档就继续；暂停中恢复'],
+  ['空格', '暂停 · 继续（菜单里是开始）'],
+  ['P', '暂停 · 继续'],
+  ['H 或 ?', '打开/关闭玩法教学'],
+  ['I', '提示：说出当前能推的一步'],
+  ['Z', '撤销一步（一次拖动算一步）'],
+  ['B / X', '切到放灯 / 画叉'],
+  ['R', '重开本局：同一张盘面，落子与计时归零'],
+  ['N', '换一局：重新出题'],
+  ['M', '音效开 / 关'],
+  ['F', '全屏'],
+  ['Esc', '关教学，或在盘面外回选档'],
+];
+
+function renderKeys() {
+  el.helpKeys.innerHTML = KEY_LABELS.map(
+    ([k, v]) => `<dt class="mono">${k}</dt><dd>${v}</dd>`
+  ).join('');
+}
+
 function renderMenu() {
+  renderKeys();
   renderTiers();
   renderRecords();
   renderResumeCard();
@@ -304,10 +390,12 @@ function renderResumeCard() {
 }
 
 function applySettings() {
+  // 静音交给 Sound 去真停 AudioContext；动效开关交给 fx，它决定仿真跑不跑粒子。
   Sound.setEnabled(Store.setting('sound'));
   const reduce = !!Store.setting('reduceMotion') || systemPrefersReducedMotion();
   setReduceMotion(!!Store.setting('reduceMotion'));
   document.body.classList.toggle('reduce-motion', reduce);
+  fx.reduced = reduce;
   $('#btn-sound').setAttribute('aria-pressed', String(!!Store.setting('sound')));
   $('#btn-sound').textContent = Store.setting('sound') ? '音效 开' : '音效 关';
   $('#btn-motion').setAttribute('aria-pressed', String(!!Store.setting('reduceMotion')));
@@ -332,7 +420,7 @@ function unpreview() {
 }
 
 function strokeStart(ev) {
-  if (!game || game.status === 'won') return;
+  if (!game || game.status === 'won' || paused || helpOpen) return;
   const c = view.hitTest(ev.clientX, ev.clientY);
   if (c < 0 || !game.isLightable(c)) return;
   ev.preventDefault();
@@ -364,6 +452,13 @@ function strokeEnd() {
     syncAll();
     return null;
   }
+  // 落子的反馈来自这一层，不参与判定：引擎说改了什么，这里只负责让人看见。
+  for (const w of step.writes) {
+    const q = view.cellPos(w.cell);
+    if (s.value === BULB) fx.pop(w.cell, q.x, q.y);
+    else fx.dust(w.cell, q.x, q.y);
+  }
+  markDirty();
   afterStep(s.value === BULB ? 'bulb' : s.value === MARK ? 'pencil' : 'erase');
   return step;
 }
@@ -389,17 +484,20 @@ $('#btn-menu').addEventListener('click', () => {
   show('menu');
 });
 $('#btn-menu-2').addEventListener('click', () => show('menu'));
+$('#btn-resume-play').addEventListener('click', () => setPaused(false));
+$('#btn-restart').addEventListener('click', () => restart());
+$('#btn-restart-2').addEventListener('click', () => restart());
+el.pause.addEventListener('click', () => setPaused(!paused));
+el.help.addEventListener('click', () => setHelp(!helpOpen));
+el.helpClose.addEventListener('click', () => setHelp(false));
+el.fs.addEventListener('click', () => toggleFullscreen());
 $('#btn-again').addEventListener('click', () => begin({ tier: game ? game.puzzle.tier : 'trainee' }));
 $('#btn-resume').addEventListener('click', () => {
   const r = Store.resume();
   if (!r) return;
   begin({ tier: r.tier, seed: r.seed, resume: r });
 });
-$('#btn-sound').addEventListener('click', () => {
-  Store.setSetting('sound', !Store.setting('sound'));
-  applySettings();
-  Sound.bulb();
-});
+$('#btn-sound').addEventListener('click', () => toggleMute());
 $('#btn-motion').addEventListener('click', () => {
   Store.setSetting('reduceMotion', !Store.setting('reduceMotion'));
   applySettings();
@@ -411,22 +509,181 @@ $('#btn-reset').addEventListener('click', () => {
   show('menu');
 });
 
-window.addEventListener('keydown', (ev) => {
-  if (ev.target && /input|textarea/i.test(ev.target.tagName)) return;
-  if (ev.key === 'h') useHint();
-  else if (ev.key === 'z') undo();
-  else if (ev.key === 'm') setMode(game && game.mode === 'mark' ? 'bulb' : 'mark');
-});
+// 键盘全集：开始/暂停/重开/换一局/静音/全屏/教学都在手上，指针不是唯一入口。
+// 焦点在按钮上时让按钮自己吃掉 Enter/Space，否则一次按键会既触发按钮又触发这里。
+const KEYS = {
+  h: () => setHelp(!helpOpen),
+  '?': () => setHelp(true),
+  i: () => useHint(),
+  z: () => undo(),
+  r: () => restart(),
+  n: () => begin({ tier: game ? game.puzzle.tier : 'trainee' }),
+  m: () => toggleMute(),
+  p: () => setPaused(!paused),
+  f: () => toggleFullscreen(),
+  b: () => setMode('bulb'),
+  x: () => setMode('mark'),
+  Escape: () => (helpOpen ? setHelp(false) : show('menu')),
+};
 
-window.addEventListener('resize', draw);
+function onKeyDown(ev) {
+  if (ev.target && /input|textarea|select/i.test(ev.target.tagName)) return;
+  const onButton = ev.target && ev.target.tagName === 'BUTTON';
+  const key = ev.key;
+  if (key === ' ' || key === 'Spacebar') {
+    if (onButton) return;
+    ev.preventDefault();
+    if (game && game.status !== 'won') setPaused(!paused);
+    else if (!game) startFromMenu();
+    return;
+  }
+  if (key === 'Enter') {
+    if (onButton) return;
+    ev.preventDefault();
+    if (!game || el.viewMenu.hidden === false) startFromMenu();
+    else if (paused) setPaused(false);
+    return;
+  }
+  const hit = KEYS[key] || KEYS[String(key).toLowerCase()];
+  if (!hit) return;
+  if (key !== 'Escape') ev.preventDefault();
+  hit();
+}
+
+// 从菜单开局：有存档中的牌局就先继续，否则开新手档。
+function startFromMenu() {
+  const r = Store.resume();
+  if (r) {
+    begin({ tier: r.tier, seed: r.seed, resume: r });
+    return game;
+  }
+  return begin({ tier: 'trainee' });
+}
+
+function setHelp(next) {
+  helpOpen = !!next;
+  el.helpView.hidden = !helpOpen;
+  el.help.setAttribute('aria-pressed', String(helpOpen));
+  if (helpOpen && game) setPaused(true);
+  if (helpOpen) el.helpClose.focus?.();
+  markDirty();
+  return helpOpen;
+}
+
+function toggleMute() {
+  Store.setSetting('sound', !Store.setting('sound'));
+  applySettings();
+  if (Store.setting('sound')) Sound.bulb();
+  return !!Store.setting('sound');
+}
+
+// 全屏绑到 HUD 上真实存在的那个按钮（#btn-fullscreen），不引用不存在的 id。
+// iOS Safari 没有 requestFullscreen：那种情况下把按钮禁掉并说明原因，而不是默默没反应。
+function fullscreenSupported() {
+  const root = el.root;
+  return !!(root.requestFullscreen || root.webkitRequestFullscreen);
+}
+
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+
+function toggleFullscreen(next) {
+  const root = el.root;
+  if (!fullscreenSupported()) {
+    el.fs.disabled = true;
+    el.fs.title = '这个浏览器不提供元素全屏（iOS Safari 走主屏添加的独立模式）';
+    return false;
+  }
+  const want = next === undefined ? !fsElement() : !!next;
+  if (want) {
+    const req = root.requestFullscreen || root.webkitRequestFullscreen;
+    const done = req.call(root);
+    if (done && done.catch) done.catch(() => {});
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    const done = exit && exit.call(document);
+    if (done && done.catch) done.catch(() => {});
+  }
+  return want;
+}
+
+function syncFullscreen() {
+  const on = !!fsElement();
+  el.fs.setAttribute('aria-pressed', String(on));
+  el.fs.textContent = on ? '退出全屏' : '全屏';
+  document.body.classList.toggle('fullscreen', on);
+  markDirty();
+  return on;
+}
+
+window.addEventListener('keydown', onKeyDown);
+
+window.addEventListener('resize', () => {
+  markDirty();
+  draw();
+});
+window.addEventListener('fullscreenchange', syncFullscreen);
+window.addEventListener('webkitfullscreenchange', syncFullscreen);
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') flushResume();
+  if (document.visibilityState === 'hidden') {
+    flushResume();
+    if (game && game.status !== 'won' && !paused) setPaused(true);
+  }
 });
 window.addEventListener('pagehide', flushResume);
+
+// ---- 主循环 ----
+//
+// 这是全仓唯一读帧间隔的地方：`now - lastFrame` 只喂给 fx.advance 的累加器，
+// 仿真内部永远只看见恒定的 SIM_STEP。所以刷新率是 30、60 还是 120，同一虚拟
+// 时刻落在同一个仿真步上，画出来的也是同一张图。
+function frame(now) {
+  raf = requestAnimationFrame(frame);
+  const dt = lastFrame ? Math.min(0.25, (now - lastFrame) / 1000) : 0;
+  lastFrame = now;
+  if (dt > 0) {
+    stats.frames += 1;
+    stats.dtSum += dt;
+    stats.dtMax = Math.max(stats.dtMax, dt);
+  }
+  if (!game) return;
+  if (paused) {
+    // 暂停期间不喂步，并把余量清掉：恢复时不会把停住的那段时间一次补跑。
+    fx.accum = 0;
+  } else {
+    stats.steps += fx.advance(dt);
+  }
+  const time = fmtMs(clock());
+  if (time !== shownTime) {
+    shownTime = time;
+    el.time.textContent = time;
+  }
+  if (needsRedraw || fx.dirty || fx.breathing(game.diag.bulbs)) draw({ resize: false });
+}
+
+// 快捷方式（manifest.shortcuts）带着 #resume / #tier=expert 进来，这里接住它。
+function routeHash() {
+  const h = String(location.hash || '');
+  if (!h) return null;
+  const tier = (h.match(/tier=([a-z]+)/) || [])[1];
+  let started = null;
+  if (h.includes('resume')) {
+    const r = Store.resume();
+    if (r) started = begin({ tier: r.tier, seed: r.seed, resume: r });
+  } else if (tier && TIERS.some((t) => t.id === tier)) {
+    started = begin({ tier });
+  }
+  // 用完就擦掉：否则刷新一次会再开一局，把玩家刚下的棋冲掉。
+  if (started && history.replaceState) history.replaceState(null, '', location.pathname + location.search);
+  return started;
+}
 
 applyThemeVars();
 applySettings();
 renderMenu();
+if (!el.fs.disabled) el.fs.disabled = !fullscreenSupported();
+syncFullscreen();
+routeHash();
+raf = requestAnimationFrame(frame);
 
 window.akari = {
   version: VERSION,
@@ -439,8 +696,31 @@ window.akari = {
   useHint,
   undo,
   setMode,
+  fx,
+  paused: () => paused,
+  help: () => helpOpen,
+  setPaused,
+  setHelp,
+  restart,
+  toggleMute,
+  toggleFullscreen,
+  fullscreenSupported,
+  fmtMs,
+  // 挂出来给验证闸实测"真静音"：静音态下 nodeCount 不许涨、contextState 必须是 suspended。
+  sound: Sound,
+  // 主循环自己的读数：帧数、平均帧间隔、以及仿真一共走了多少步。
+  // 帧率对拍要的就是这几个数——它们不挂在 window 上，任何探针都复验不了。
+  stats: () => ({
+    ...stats,
+    avgDt: stats.frames ? stats.dtSum / stats.frames : 0,
+    fps: stats.dtSum ? stats.frames / stats.dtSum : 0,
+    simTime: fx.time,
+    simSteps: fx.steps,
+    accum: fx.accum,
+    parts: fx.parts.length,
+  }),
   tap(c, mode) {
-    if (!game) return null;
+    if (!game || paused) return null;
     const step = mode === undefined ? game.tap(c) : game.tap(c, mode);
     if (step) afterStep(step.writes[0].to === BULB ? 'bulb' : step.writes[0].to === MARK ? 'pencil' : 'erase');
     return step;
@@ -453,7 +733,7 @@ window.akari = {
     return r;
   },
   elapsed: clock,
-  state: () => (game ? { ...game.state(), elapsedMs: clock(), mode: game.mode } : null),
+  state: () => (game ? { ...game.state(), elapsedMs: clock(), mode: game.mode, paused, fx: fx.summary() } : null),
   cellsOf: (x, y) => (game ? game.cellAt(x, y) : -1),
   isLitCell: (c) => (game ? !game.diag.unlit.has(c) : false),
   // Exposed so the browser scenario suite checks the *same* engine the game runs, rather

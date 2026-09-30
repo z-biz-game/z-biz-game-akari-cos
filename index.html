@@ -42,8 +42,10 @@
       <p class="sub">Akari · 灯塔推理</p>
     </div>
     <div class="top-actions">
+      <button id="btn-help" class="ghost" type="button" aria-pressed="false" aria-controls="view-help">玩法教学</button>
       <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
       <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+      <button id="btn-fullscreen" class="ghost" type="button" aria-pressed="false">全屏</button>
     </div>
   </header>
 
@@ -108,6 +110,16 @@
             </div>
           </div>
         </div>
+        <div id="pause-veil" hidden>
+          <div class="pause-card">
+            <h3>已暂停</h3>
+            <p>表停在这里，盘面也不接受落子。按 <b>P</b> 或 <b>空格</b> 继续。</p>
+            <div class="pause-actions">
+              <button id="btn-resume-play" class="primary" type="button">继续这一局</button>
+              <button id="btn-restart" class="ghost" type="button">重开本局</button>
+            </div>
+          </div>
+        </div>
         <p id="conflict-line" class="conflict-line" aria-live="polite"></p>
       </div>
 
@@ -119,6 +131,8 @@
         <div class="acts">
           <button id="btn-hint" class="primary" type="button">提示<span class="mono" id="hint-count">0</span></button>
           <button id="btn-undo" class="ghost" type="button">撤销</button>
+          <button id="btn-pause" class="ghost" type="button" aria-pressed="false">暂停</button>
+          <button id="btn-restart-2" class="ghost" type="button">重开本局</button>
           <button id="btn-new" class="ghost" type="button">换一局</button>
           <button id="btn-menu" class="ghost" type="button">回选档</button>
         </div>
@@ -147,6 +161,46 @@
       </aside>
     </section>
   </main>
+
+  <section id="view-help" class="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <h2 id="help-title">玩法教学 · 两分钟上手</h2>
+      <p class="help-lead">目标：把盘面上每一个空格都照亮。规则只有三条硬约束——
+        灯沿直线照亮整行整列，墙会挡光；两盏灯不能在同一条直线上互相照到；
+        墙上的数字写着它上下左右四邻一共放了几盏灯。这里没有运气题，每一局都能靠逻辑推到底。</p>
+      <div class="help-cols">
+        <div>
+          <h3>先读盘面</h3>
+          <ol class="rules">
+            <li><b>冷格</b>是还没被照亮的空格，<b>暖格</b>已经被某盏灯照到。</li>
+            <li><b>放灯</b>模式点一格落一盏灯；<b>画叉</b>模式记一笔"这里放不下"。</li>
+            <li>按住拖动可以一次画一条线，一次拖动算一步，撤销也一次收回整条。</li>
+            <li>数字变绿说明它四邻的灯数已经凑满；变红说明超了，盘面已经矛盾。</li>
+          </ol>
+          <h3>推不动的时候</h3>
+          <p class="help-note"><b>提示</b>（按 <b>I</b>）只会写出当前真能推的一步，并说出它依据哪条规则；
+            推不出来的格它不给，也就不花你的"提示次数"。纪录先比谁求人的次数少。</p>
+        </div>
+        <div>
+          <h3>六条铅笔规则</h3>
+          <ol class="rules">
+            <li><b>线索凑满</b>：还差的灯数正好等于还能放的格数，那些格全是灯。</li>
+            <li><b>线索闭合</b>：数字已经满足，其余邻格一律不能放。</li>
+            <li><b>线索成组</b>：共邻的几处线索是一份约束，能同时满足的摆法只有一种。</li>
+            <li><b>灯光直照</b>：一盏灯照亮整条线，这条线上再放不下第二盏。</li>
+            <li><b>唯一光源</b>：有个空格只剩一处能照到它，那处必是灯。</li>
+            <li><b>反证</b>：假设这里放灯（或不放）会让盘面矛盾，假设就反了。</li>
+          </ol>
+          <h3>键盘</h3>
+          <dl id="help-keys" class="keys"></dl>
+        </div>
+      </div>
+      <div class="help-actions">
+        <button id="btn-help-close" class="primary" type="button">开始推理</button>
+        <span class="help-tip">按 <b>H</b> 或 <b>Esc</b> 随时开关这一页</span>
+      </div>
+    </div>
+  </section>
 
   <footer class="foot">
     <span>每局唯一解 · 每局可用逻辑推出 · 提示只给可推导的格 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>

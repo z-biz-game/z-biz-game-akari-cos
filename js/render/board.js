@@ -8,6 +8,7 @@
 
 import { Palette, Cell, Radius } from '../theme.js';
 import { OPEN, BULB, MARK } from '../engine/akari.js';
+import { Sheets } from './sheets.js';
 
 export function layoutFor(w, h, availW, availH) {
   const pad = 8;
@@ -47,15 +48,20 @@ export class BoardView {
     return { x: cx, y: cy, size: cell };
   }
 
-  // Pointer position → cell index, or -1 for anything outside the grid. Edge clicks must not
-  // land on a cell: the padding is deliberately not part of the board.
+  // 指针位置 → 格索引，盘外一律 -1。边缘点击不能落到格上：留白故意不属于棋盘。
+  //
+  // 先按 rect 的实际宽高折算一次：geo 记的是我们设定给 canvas 的 CSS 尺寸，而页面缩放、
+  // 窄屏 flex 收缩、或将来给 #board 加 max-width 都会让 rect 与它脱钩。不折算的话，
+  // 手机上"点 A 打 B"就是这么来的。
   hitTest(clientX, clientY) {
     const rect = this.canvas.getBoundingClientRect();
     const { cell, x, y } = this.geo;
     const game = this.game;
-    if (!cell || !game) return -1;
-    const px = clientX - rect.left - x;
-    const py = clientY - rect.top - y;
+    if (!cell || !game || !rect.width || !rect.height) return -1;
+    const kx = this.geo.w / rect.width;
+    const ky = this.geo.h / rect.height;
+    const px = (clientX - rect.left) * kx - x;
+    const py = (clientY - rect.top) * ky - y;
     if (px < 0 || py < 0) return -1;
     const gx = Math.floor(px / cell);
     const gy = Math.floor(py / cell);
@@ -63,17 +69,38 @@ export class BoardView {
     return gy * game.w + gx;
   }
 
-  draw(game, { pulse = null } = {}) {
+  // 格心在"格坐标"下的位置（不是像素）：fx 的粒子存在这一坐标系里，
+  // 于是窗口大小变化、DPR 变化都不会把已经飞出去的光尘挪位。
+  cellPos(i) {
+    const game = this.game;
+    if (!game) return { x: 0, y: 0 };
+    return { x: (i % game.w) + 0.5, y: (((i / game.w) | 0)) + 0.5 };
+  }
+
+  draw(game, { fx = null } = {}) {
     this.game = game;
     const { ctx, geo } = this;
     const { cell, x: ox, y: oy } = geo;
     const b = game.board;
     const diag = game.diag;
+    // 呼吸系数来自 fx 的仿真钟：动画的一切时间量都从那条时间轴上取，
+    // 于是同一虚拟时刻在任何刷新率下画出同一张图。
+    const breath = fx ? fx.breath() : 1;
+    const win = fx ? fx.win : 0;
     ctx.clearRect(0, 0, geo.w, geo.h);
 
     roundRect(ctx, 0, 0, geo.w, geo.h, Radius.card);
     ctx.fillStyle = Palette.surface;
     ctx.fill();
+    // 夜色纹理铺在底面之下当"纸"：它是美术资产，不是 CSS 装饰，所以随棋盘一起缩放。
+    const field = Sheets.pattern(ctx, 'field');
+    if (field) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = field;
+      ctx.fillRect(0, 0, geo.w, geo.h);
+      ctx.restore();
+    }
 
     // Open cells first: the base grid, so light can be painted over it.
     for (const c of b.lightable) {
@@ -96,9 +123,10 @@ export class BoardView {
       const grad = r.dir === 1
         ? ctx.createLinearGradient(a.x, 0, z.x + a.size, 0)
         : ctx.createLinearGradient(0, a.y, 0, z.y + a.size);
-      grad.addColorStop(0, 'rgba(255,200,92,0.05)');
-      grad.addColorStop(0.5, Palette.glow);
-      grad.addColorStop(1, 'rgba(255,200,92,0.05)');
+      // 灯晕呼吸时整条光带跟着明暗一次，盘面才像"这一盏灯在亮着"而不是贴了张渐变图。
+      grad.addColorStop(0, rgba(255, 200, 92, 0.05 * breath));
+      grad.addColorStop(0.5, rgba(255, 200, 92, 0.2 * breath));
+      grad.addColorStop(1, rgba(255, 200, 92, 0.05 * breath));
       ctx.fillStyle = grad;
       const thick = Math.max(4, cell * 0.62);
       if (r.dir === 1) ctx.fillRect(a.x, a.y + (cell - thick) / 2, z.x + a.size - a.x, thick);
@@ -151,13 +179,25 @@ export class BoardView {
       const cy = r.y + cell / 2;
       const rad = cell * Cell.bulbScale;
       const bad = diag.conflict.has(c);
-      const halo = ctx.createRadialGradient(cx, cy, rad * 0.4, cx, cy, rad * 2.6);
-      halo.addColorStop(0, bad ? 'rgba(255,92,122,0.45)' : Palette.glowCore);
-      halo.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = halo;
-      ctx.beginPath();
-      ctx.arc(cx, cy, rad * 2.6, 0, Math.PI * 2);
-      ctx.fill();
+      // 刚放下的一盏灯开得更亮一些（bloom 从 1 衰减到 0），这是"你按下的这一下"的反馈。
+      const bloom = fx ? fx.bloomOf(c) : 0;
+      const haloScale = breath * (1 + bloom * 0.55);
+      const haloR = rad * 2.6 * haloScale;
+      const sheet = Sheets.get(bad ? 'haloBad' : 'halo');
+      if (sheet) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, 0.9 * haloScale);
+        ctx.drawImage(sheet, cx - haloR, cy - haloR, haloR * 2, haloR * 2);
+        ctx.restore();
+      } else {
+        const halo = ctx.createRadialGradient(cx, cy, rad * 0.4, cx, cy, haloR);
+        halo.addColorStop(0, bad ? rgba(255, 92, 122, 0.45) : rgba(255, 200, 92, 0.42));
+        halo.addColorStop(1, rgba(0, 0, 0, 0));
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.beginPath();
       ctx.arc(cx, cy, rad, 0, Math.PI * 2);
       ctx.fillStyle = bad ? Palette.error : Palette.lamp;
@@ -171,22 +211,64 @@ export class BoardView {
       ctx.fill();
     }
 
-    // The cell a hint just named, and the last cell the player touched. Both are transient
-    // paint over state the engine already knows.
-    const marks = [];
-    if (pulse && pulse.cells && pulse.cells.length) marks.push({ cells: pulse.cells, color: Palette.hint });
-    if (pulse && pulse.cell != null) marks.push({ cells: [pulse.cell], color: Palette.accent });
-    for (const m of marks) {
-      for (const c of m.cells) {
+    // 提示点名的那几格：描边随脉冲寿命淡出。它是盖在引擎已知状态上的一层临时画法。
+    const pulse = fx ? fx.pulse : null;
+    if (pulse && pulse.cells.length) {
+      const a = Math.max(0, fx.pulseAlpha());
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.strokeStyle = Palette.hint;
+      ctx.lineWidth = Math.max(2, cell * 0.08);
+      for (const c of pulse.cells) {
         if (c < 0 || b.wall[c]) continue;
         const r = this.cellRect(c);
-        ctx.strokeStyle = m.color;
-        ctx.lineWidth = Math.max(2, cell * 0.08);
         roundRect(ctx, r.x + 2, r.y + 2, cell - 4, cell - 4, Radius.cell);
         ctx.stroke();
       }
+      ctx.restore();
+    }
+
+    // 光尘。位置存在格坐标里，所以这里只做一次"格 → 像素"的乘法。
+    if (fx && fx.parts.length) {
+      const spark = Sheets.get('spark');
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (const q of fx.parts) {
+        const px = ox + q.x * cell;
+        const py = oy + q.y * cell;
+        const s = q.size * cell * 2;
+        ctx.globalAlpha = Math.max(0, Math.min(1, q.life / q.max)) * 0.85;
+        if (spark) {
+          ctx.translate(px, py);
+          ctx.rotate(q.rot);
+          ctx.drawImage(spark, -s / 2, -s / 2, s, s);
+          ctx.rotate(-q.rot);
+          ctx.translate(-px, -py);
+        } else {
+          ctx.fillStyle = Palette.lampEdge;
+          ctx.beginPath();
+          ctx.arc(px, py, s / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // 收官那一下：整盘压一层暖白，0.9 秒内退掉（省动效时 fx.win 恒为 0）。
+    if (win > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.5, win * 0.5);
+      ctx.fillStyle = Palette.lampEdge;
+      roundRect(ctx, 0, 0, geo.w, geo.h, Radius.card);
+      ctx.fill();
+      ctx.restore();
     }
   }
+}
+
+// canvas 的渐变端点只吃字符串，而 alpha 要随仿真变——留一个拼接点，别得到处写模板字符串。
+function rgba(r, g, b, a) {
+  return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, a)).toFixed(4)})`;
 }
 
 const FontStack = "-apple-system, 'SF Pro Text', system-ui, sans-serif";
