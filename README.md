@@ -13,7 +13,7 @@
   钉在哪一格；推不出东西时它不收钱，只说"当前没有可推导的格"。
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
-- 规模：11 个 ES Module / 2,063 行 JS + 5 个验证脚本 / 1,323 行 + 493 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 2,846 行 JS + 7 个验证脚本 / 2,013 行 + 734 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -86,7 +86,8 @@ BASE_URL=https://z-biz-game.github.io/z-biz-game-akari-cos/ npm run verify
 | 专家 | 10×10 | 0.40 | ~10% | 21–27 | 23.3 | 40/40 | 11 | 1 |
 | 大师 | 12×12 | 0.40 | ~0% | 27–34 | 29.0 | 40/40 | 15 | 0 |
 
-- 出题耗时：最慢档位 **49 ms/局**（大师，含 22 次尝试）；桌面端点「换一局」是即时的。
+- 出题耗时：最慢档位 **49 ms/局**（大师，含 22 次尝试）——这一列是**本机墙钟**读数、**会随机器漂**，
+  所以本仓**不设 `budgetMs` 门禁**，`doctest` 只钉"最慢的是大师"这个方向；桌面端点「换一局」是即时的。
 - 穷举复核：**18/18 局**独立计数器与铅笔求解器的唯一解判定一致；五档的复解全部一致。
 - 填灯器产出的 60/60 个盘面合法（`placeBulbs` 是唯一允许回溯的地方）。
 
@@ -105,10 +106,13 @@ js/engine/count.js    逐格穷举解数计数器（独立复核唯一解）
 js/engine/generate.js 墙图案 → 线索修剪 → 评分 → 五档表
 js/ui/game.js         状态机：点击 / 一笔 / 撤销 / 提示 / 判胜
 js/render/board.js    布局 + 命中测试 + canvas 绘制
-js/audio/synth.js     六个合成音效
+js/render/fx.js       灯亮的绽放、提示的呼吸脉冲、放灯与收官的光尘
+js/render/sheets.js   位图资产加载器：图没到之前画矢量版本，到了之后换成图
+js/audio/synth.js     七个合成音效
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
-tools/                引擎断言、难度实测台、CDP 驱动、浏览器场景、一键验证
+js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）
+tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、CDP 驱动、浏览器场景、一键验证
 ```
 
 ---
@@ -128,6 +132,28 @@ tools/                引擎断言、难度实测台、CDP 驱动、浏览器场
 - 存档不含解也不含墙：盘面由种子重新生成，260 字节能装下 10×10 的一局。
 
 ---
+
+## 文档数字闸（doctest）与破坏试验台账（sabotage）
+
+上面每一处数字都由 `tools/doctest.mjs` 现算对表：档位与 band 读 `js/engine/generate.js:15-21` 的 `TIERS`
+现值，六条铅笔规则读 `js/engine/akari.js:19-26` 的 `Rules` 现值，成组枚举上限读 `js/engine/akari.js:214`
+那一行的 `open.length > 12`，分位与入选是现场跑一遍 `tools/balance.mjs`（每档张数由
+`tools/balance.mjs:13` 的 `SAMPLES` 决定），77 项引擎断言是现场跑一遍 `tools/engine-test.mjs`，
+端口对 `tools/verify.sh:17` 与 `package.json` 的 dev，CI 的接线对 `.github/workflows/ci.yml:35`
+（同一个 check job 里 40–44 行就是这两道文档闸自己的步骤）。**代码是真相**：文档与代码不一致时改文档，不许把断言改松。
+
+- 本闸 16 组 / 165 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
+  明天删掉 20 条断言，`rc=0` 也救不了这一行——闸变窄就是红。`tools/verify.sh` 的 `LOGIC_EXPECTS` 钉的是
+  同一组数，两处必须一致。
+- `tools/sabotage.mjs:30` 的破坏试验台账（5 把刀）把「文档抄了一个已经不存在的数」逐类塞回代码：
+  K1 改 band、K2 改铅笔规则名、K3 改 `server.cjs` 的默认端口、K4 从浏览器场景注册表里摘掉一个场景、K5 抬走格子下限；
+  每把刀都必须把**它点名的那一条**断言逼红，只红在别处不算逼到，复原只认内存里的原始字节。
+- 只有本机墙钟那一类读数不参与等式（见上一节的 ms 说明）：钉不住 ≠ 可以删，文档里删掉它台账就红。
+
+```bash
+npm run doctest   # 文档 == 代码 / balance / engine-test 现跑（不开浏览器，秒级）
+npm run sabotage  # 破坏试验台账：五把刀各自逼红点名的断言
+```
 
 ## 部署
 

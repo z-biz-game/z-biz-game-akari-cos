@@ -34,6 +34,15 @@ jobs:
       - name: Engine tests
         run: node tools/engine-test.mjs
 
+      # 文档诚实两道闸：doctest 把 README/DESIGN 里每个数字与代码或本仓闸的现跑对表；
+      # sabotage 用五把刀把同一批断言逐类逼红，证明这些绿是被守住的而不是解析器集体扑空。
+      # 都是纯 node（balance / engine-test 现场跑），不开浏览器，所以合入门禁也跑得动。
+      - name: Doc numbers equal code (doctest)
+        run: node tools/doctest.mjs
+
+      - name: Sabotage ledger trips every assertion group
+        run: node tools/sabotage.mjs
+
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
 
