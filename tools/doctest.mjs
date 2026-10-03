@@ -409,8 +409,11 @@ ok(drift.length === 0, `D11b 每一条 path:NN 引用都落在含字母的那一
   drift.length ? `漂移：${drift.slice(0, 5).join('，')}${drift.length > 5 ? ` …共 ${drift.length} 条` : ''}` : `${cites.length} 条落点都有代码/配置文本`);
 
 // 台账的刀与组：D12 与 D13 都要读，先解析一次
-const knifeIds = [...SAB_SRC.matchAll(/id: '(K\d+)'/g)].map((m) => m[1]);
-const knifeGroups = [...SAB_SRC.matchAll(/id: '(K\d+)', group: '(D\d+)'/g)].map((m) => ({ id: m[1], group: m[2] }));
+// 行首锚定是必须的：一旦有刀打在 sabotage.mjs 自己的 KNIVES 头上，那把刀的 from/to 字面量里
+// 也写着 `id: 'K3', group: 'D8'` 这样的文本，不锚定就会把刀数多算（z-biz-game-masyu-cos 今天就数成 20 把）。
+const KNIFE_HEAD = /^    id: '(K\d+)', group: '(D\d+)'/gm;
+const knifeIds = [...SAB_SRC.matchAll(KNIFE_HEAD)].map((m) => m[1]);
+const knifeGroups = [...SAB_SRC.matchAll(KNIFE_HEAD)].map((m) => ({ id: m[1], group: m[2] }));
 
 // ---- D12 接线：doctest 与 sabotage 进了 verify.sh 的逻辑段、ci.yml 的 check job、package.json ----
 const pkgHas = (k) => (PKG.scripts?.[k] || '').includes(`tools/${k}.mjs`);
@@ -463,7 +466,7 @@ ok(!!dsDoc && +dsDoc[1] === +dsRows && +dsDoc[2] === +dsChecks,
   dsDoc ? `文档=${dsDoc[1]}/${dsDoc[2]} · 代码=${dsRows}/${dsChecks}` : '文档那句解析不到（被改写就是这里红）');
 
 // ---- D13 台账本身：文档说的刀数 == sabotage.mjs 里 KNIVES 条数；刀与刀打的组不许重叠 ----
-ok(knifeIds.length >= 4, `D13a sabotage.mjs 里至少 4 把刀（当前 ${knifeIds.length} 把：${knifeIds.join(' ')}）`, `${knifeIds.length} 把：${knifeIds.join(' ')}`);
+ok(knifeIds.length >= 16, `D13a sabotage.mjs 里十六把刀一把不少（当前 ${knifeIds.length} 把：${knifeIds.join(' ')}）`, `${knifeIds.length} 把`);
 const knifeCountDoc = (README.match(/破坏试验台账（(\d+) 把刀）/) || [])[1];
 ok(!!knifeCountDoc && +knifeCountDoc === knifeIds.length, `D13b README 那句「台账（N 把刀）」等于 sabotage.mjs 里的刀数`,
   `文档 ${knifeCountDoc ?? '未解析'} vs 脚本 ${knifeIds.length}`);
@@ -472,8 +475,17 @@ ok(knifeGroups.length === knifeIds.length && new Set(knifeGroups.map((k) => k.gr
 const rcCells = knifeIds.map((id) => { const m = SAB_SRC.match(new RegExp(`id: '${id}'[\\s\\S]*?rc: '(\\d+|\\?)'`)); return m ? m[1] : null; });
 ok(rcCells.every((x) => x && /^\d+$/.test(x)), `D13d 台账每一格 rc 都是从闸里读回来的数字（? 表示这一版还没整跑过）`, rcCells.join(' / '));
 const knifeFiles = knifeGroups.map((k) => { const m = SAB_SRC.match(new RegExp(`id: '${k.id}'[\\s\\S]*?file: '([^']+)'`)); return m && m[1]; });
-ok(new Set(knifeFiles).size === knifeFiles.length && knifeFiles.every((f) => existsSync(join(ROOT, f))),
-  `D13e 刀与刀改的是不同文件、且都是真文件（同一文件上两把刀会互相掩盖）`, knifeFiles.join(' · '));
+// 原来这里钉的是「刀与刀改的是不同文件」，那条比实际风险严：一个文件上有几把刀并不会互相掩盖
+// （台账一次只落一把、落完用内存里的原始字节复原），真正会出事的是两把刀抢同一段文本——
+// 前一把的 to 里带着后一把的 from，命中数就不是 1 了。所以钉这一条。
+const knifeNeedles = knifeGroups.map((k, i) => {
+  const m = SAB_SRC.match(new RegExp(`id: '${k.id}'[\\s\\S]*?from: (.*)$`, 'm'));
+  return m && `${knifeFiles[i]}::${m[1]}`;
+});
+ok(knifeFiles.every((f) => f && existsSync(join(ROOT, f)))
+  && knifeNeedles.every(Boolean) && new Set(knifeNeedles).size === knifeNeedles.length,
+  `D13e 每把刀的靶文件都在树里，且「文件 + 落法 + 针」三元组两两不同（两把刀抢同一段文本才会互相掩盖）`,
+  `针 ${new Set(knifeNeedles).size}/${knifeNeedles.length} · ${knifeFiles.join(' · ')}`);
 const knifeAtLine = knifeFiles.map((f) => f === 'tools/verify.sh' || f === '.github/workflows/ci.yml');
 ok(!knifeAtLine.some(Boolean), 'D13f 没有一把刀去切 verify.sh 或 ci.yml 本身（闸在 verify.sh 里跑，切它会动到正在执行的脚本）',
   knifeFiles.join(' · '));

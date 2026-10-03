@@ -23,7 +23,7 @@ BASE=${BASE_URL:-http://127.0.0.1:$HTTP/}
 # 断言，只要剩下的还是绿的，整道闸一样 exit 0。所以每条闸实跑出来的条数必须逐条对上这里的钉，
 # 改闸就要同时改这一行（doctest 自己在 D16a/D16b 里也钉了同一组数，两处必须一致）。
 FAILED=0
-LOGIC_EXPECTS="engine-test:77 doctest:16/174 sabotage:5"
+LOGIC_EXPECTS="engine-test:77 doctest:16/174 sabotage:16"
 pin_of() { printf '%s\n' "$LOGIC_EXPECTS" | tr ' ' '\n' | grep "^$1:" | cut -d: -f2; }
 LOGIC_LOG=$(mktemp)
 

@@ -23,10 +23,13 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const p = (rel) => join(ROOT, rel);
 
-// 五把刀，各打 doctest 的一个不同组：D1 档位 band、D2 铅笔规则名、D6 端口默认号、
-// D8 场景注册表、D9 渲染常量。全是纯逻辑的常量改动 —— 不动浏览器、不动端口，
-// 因此这把刀在任何机器上都一样快、一样准；并且都不切 verify.sh / ci.yml 本身
-// （本闸就跑在 verify.sh 里，切它等于改一条正在执行的脚本）。
+// 十六把刀，doctest 的十六个组一组一把：D1 档位 band、D2 铅笔规则名、D3 balance 表头百分比、
+// D4 填灯器样本量、D5 引擎断言的期望值、D6 端口默认号、D7 HTML 行数、D8 场景注册表、D9 渲染常量、
+// D10 符号锚点的行号、D11 引用落点、D12 npm 接线、D13 台账自己、D14 budgetMs 那句承诺、
+// D15 unpinned 的 needle、D16 本闸项数。全是纯逻辑的最小扰动 —— 不动浏览器、不动端口，也不切
+// verify.sh / ci.yml 本身（本闸就跑在 verify.sh 里，切它等于改一条正在执行的脚本）。
+// K12/K14/K15 三把切的是闸自己的两个文件：闸进程已经把源码读进内存，落刀只影响**当场那一趟 doctest**，
+// 而且因为规矩 4 要求被切文件在 git 里干净，所以自钉落盘后必须先提交再重跑（第二趟才是幂等证据）。
 const KNIVES = [
   {
     id: 'K1', group: 'D1', file: 'js/engine/generate.js',
@@ -62,6 +65,88 @@ const KNIVES = [
     breaks: '把可读格子的下限从 18 px 抬到 20 px（README 与 DESIGN §7 都写「18–52 px」）',
     assert: /FAIL D9f 文档两处「18–52 px」== theme\.js 的 Cell\.min\/max = 20\/52/m,
     rc: '1',
+  },
+  {
+    id: 'K6', group: 'D3', file: 'tools/balance.mjs',
+    from: '留线索约 ${Math.round((1 - tier.prune) * 100)}%', to: '留线索约 ${Math.round((1 - tier.prune) * 99)}%',
+    breaks: '把 balance 表头里「留线索约 X%」的换算从 ×100 改成 ×99（文档难度表抄的是这一行打出来的百分数）',
+    assert: /^.*FAIL .*D3g .*的盘面.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K7', group: 'D4', file: 'tools/balance.mjs',
+    from: '  for (let s = 0; s < 60; s++) {', to: '  for (let s = 0; s < 61; s++) {',
+    breaks: '把填灯器样本量从 60 局偷偷加到 61 局（README 那句「填灯器产出的 60/60 个盘面合法」抄的是上一次跑的数）',
+    assert: /^.*FAIL .*D4e README「填灯器产出的/m,
+    rc: '?',
+  },
+  {
+    id: 'K8', group: 'D5', file: 'tools/engine-test.mjs',
+    from: "  eq('填出来的灯盘通过独立检查', verify(b).length, 0);", to: "  eq('填出来的灯盘通过独立检查', verify(b).length, 1);",
+    breaks: '把一条引擎断言的期望从 0 改成 1（文档那句「77 项引擎断言全过」是从绿的那次抄来的）',
+    assert: /^.*FAIL .*D5a engine-test 现场跑 rc=/m,
+    rc: '?',
+  },
+  {
+    id: 'K9', group: 'D7', file: 'index.html',
+    from: '<!DOCTYPE html>', to: '<!DOCTYPE html>\n<!-- 台账：这一行让 HTML 的行数比文档多 1 -->',
+    breaks: '往 index.html 顶上塞一行注释（README 的规模表里 CSS/HTML 行数是上一次数的）',
+    assert: /^.*FAIL .*D7f CSS\/HTML 行数.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K10', group: 'D10', file: 'js/engine/akari.js',
+    from: "    if (!open.length || open.length > 12) continue;\n    const targets = [];", to: "    const targets = [];\n    if (!open.length || open.length > 12) continue;",
+    breaks: '把成组枚举上限那行与下一行换个位置（行为逐位相同，只有文档引用的 `akari.js:214` 漂到了隔壁行）',
+    assert: /^.*FAIL .*D10 文档为 js\/engine\/akari\.js 写的某处.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K11', group: 'D12', file: 'package.json',
+    from: '"doctest": "node tools/doctest.mjs",', to: '"doctest-legacy": "node tools/doctest.mjs",',
+    breaks: '把 npm run doctest 这个入口改名（文档与 verify 的接线说明还写着它存在）',
+    assert: /^.*FAIL .*D12a package\.json 有 doctest 这条 script/m,
+    rc: '?',
+  },
+  {
+    id: 'K12', group: 'D13', file: 'tools/sabotage.mjs',
+    // 靶面是本文件自己的 KNIVES 数组，所以针必须拆成两段写：连着写的话这一把的 from 字面量里也有一份
+    // 同样的文本，前置的「恰好命中一次」就会拒落这把刀（masyu 试过，报的是命中 3 次）。
+    from: "    id: 'K11', group: 'D12', " + "file: 'package.json',",
+    to: "    id: 'K11', group: 'D13', " + "file: 'package.json',",
+    breaks: '让两把刀打同一组（K11 的组名改成 D13，与 K12 撞车）——「一组一把」是这一组唯一的判据',
+    assert: /^.*FAIL .*D13c 每把刀打的是不同的组.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K13', group: 'D14', file: 'tools/balance.mjs',
+    from: '// 难度实测台. Reads the difficulty of each tier off generated boards — it does not set it.',
+    to: '// 难度实测台. Reads the difficulty of each tier off generated boards — it does not set it（budgetMs）.',
+    breaks: '在 balance 的头注释里写出 budgetMs 这个词（D14b 核的是「代码里没有这个 token」，不是语义）',
+    assert: /^.*FAIL .*D14b balance\.mjs 里没有任何 budgetMs.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K14', group: 'D15', file: 'tools/doctest.mjs',
+    from: '/14 checks, 0 failed/],', to: '/140 checks, 0 failed/],',
+    breaks: '把 unpinned 清单里 U1 的 needle 改成一个文档里根本不存在的数（反空转那一条就不再逐条找 needle 了）',
+    assert: /^.*FAIL .*D15 U1「.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K15', group: 'D16', file: 'tools/doctest.mjs',
+    from: 'const EXPECT_ROWS = 174;', to: 'const EXPECT_ROWS = 173;',
+    breaks: '把本闸自己钉的项数悄悄改小 1（删一条断言不改锁，就是这一把的形状）',
+    assert: /^.*FAIL .*D16b 本闸项数.*$/m,
+    rc: '?',
+  },
+  {
+    id: 'K16', group: 'D11', file: 'tools/balance.mjs',
+    from: "import { countSolutions, UNIQUE } from '../js/engine/count.js';\n\nconst N = Number(process.env.SAMPLES || 40);",
+    to: "import { countSolutions, UNIQUE } from '../js/engine/count.js';\nconst N = Number(process.env.SAMPLES || 40);\n",
+    breaks: '把 balance 顶部那个空行挪到下一句之后（总行数一字不差，只有 README 引用的 `balance.mjs:13` 落到空行上）',
+    assert: /^.*FAIL .*D11b 每一条 path:NN 引用都落在含字母的那一行/m,
+    rc: '?',
   },
 ];
 
