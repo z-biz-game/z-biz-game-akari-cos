@@ -18,11 +18,12 @@ HTTP=${HTTP_PORT:-5247}
 BASE=${BASE_URL:-http://127.0.0.1:$HTTP/}
 
 # ---- 逻辑闸（纯 node，不开浏览器）：排在找 Chrome、起服务之前 ----
-# 三道闸各把自己的"体量"钉在下面这一行。为什么要钉：rc=0 看不出闸变窄——明天有人删掉 20 条
+# 四道闸各把自己的"体量"钉在文件里（第四道是部署集闸，它另钉在 DEPLOY_SET_ROWS_WANT）。为什么要钉：
+# rc=0 看不出闸变窄——明天有人删掉 20 条
 # 断言，只要剩下的还是绿的，整道闸一样 exit 0。所以每条闸实跑出来的条数必须逐条对上这里的钉，
 # 改闸就要同时改这一行（doctest 自己在 D16a/D16b 里也钉了同一组数，两处必须一致）。
 FAILED=0
-LOGIC_EXPECTS="engine-test:77 doctest:16/165 sabotage:5"
+LOGIC_EXPECTS="engine-test:77 doctest:16/174 sabotage:5"
 pin_of() { printf '%s\n' "$LOGIC_EXPECTS" | tr ' ' '\n' | grep "^$1:" | cut -d: -f2; }
 LOGIC_LOG=$(mktemp)
 
@@ -50,6 +51,25 @@ fi
 echo "=== 逻辑闸 tools/sabotage.mjs（破坏试验台账：每一类谎都要把对应断言逼红）==="
 node "$HERE/tools/sabotage.mjs" || { echo "  sabotage 红：某一类破坏没能把对应断言逼到失败" >&2; FAILED=1; }
 rm -f "$LOGIC_LOG"
+
+# 部署集闸：跑的是 Pages 那份产物（tools/assemble-site.sh 拷出来的），不是仓库根。
+# 放在 Chrome 之前：它不需要浏览器，而上一轮线上缺的正是 manifest/sw.js/icons//
+# CSS 里那张 night-field.png —— 本地跑仓库根的浏览器闸永远看不见这种缺。
+# 钉的是这个闸自己的断言条数：rc=0 也可能是闸少了断言之后跑出来的 0。这颗钉只在这里取一次
+# （DEPLOY_SET_ROWS_WANT），下面两处判定都读同一个变量——抄两遍就有两个会漂的副本。
+echo "=== 部署集闸 tools/deploy-set.mjs（引用 == 产物）==="
+DS_WANT=${DEPLOY_SET_ROWS_WANT:-43}
+DS_LOG="$HERE/_tmp-verify-deploy-set.log"
+node "$HERE/tools/deploy-set.mjs" >"$DS_LOG" 2>&1
+DS_RC=$?
+DS_ROWS=$(sed -n 's/^rows: \([0-9]*\) .*$/\1/p' "$DS_LOG" | tail -1)
+cat "$DS_LOG"
+rm -f "$DS_LOG"
+[ "$DS_RC" = 0 ] || { echo "  deploy-set 红：产物里缺页面会去要的路径（rc=$DS_RC）" >&2; FAILED=1; }
+if [ "${DS_ROWS:-0}" != "$DS_WANT" ]; then
+  echo "  deploy-set 断言条数 ${DS_ROWS:-未打印 rows:} != 钉的 $DS_WANT" >&2
+  FAILED=1
+fi
 
 CHROME=${CHROME_BIN:-}
 if [ -z "$CHROME" ]; then

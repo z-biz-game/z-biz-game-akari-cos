@@ -46,6 +46,12 @@ jobs:
       - name: Entry files exist
         run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
 
+      # 部署集闸：跑的是 tools/assemble-site.sh 拷出来的那份产物，不是仓库根。
+      # 插在 40–44 之后是有意的——README 里那句「同一个 check job 里 40–44 行就是这两道文档闸
+      # 自己的步骤」是按行号引的，插在上面会让那个引用指向隔壁的断言。
+      - name: Deploy set carries every referenced path
+        run: node tools/deploy-set.mjs
+
   # 真浏览器闸：headless Chrome + CDP，读 DOM 文本/几何与画布像素，不读内部标志位。
   # 独立 job，node 22 而不是 check job 的 20：台架是裸 CDP 驱动，用的是 Node 22 才有的全局
   # WebSocket/fetch；在 20 上第一次 attach 就死在 "WebSocket is not defined"，一条断言都跑不到。

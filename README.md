@@ -13,7 +13,7 @@
   钉在哪一格；推不出东西时它不收钱，只说"当前没有可推导的格"。
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
-- 规模：14 个 ES Module / 2,846 行 JS + 7 个验证脚本 / 2,013 行 + 734 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 2,846 行 JS + 9 个验证脚本 / 2,309 行 + 734 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -33,7 +33,7 @@ npm run balance      # 难度实测台：每档分数分位、入选率、求解
 npm run verify       # 无头 Chrome 跑 7 个浏览器场景（需本机 Chrome，见下）
 ```
 
-`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 154 项断言）：
+`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 155 项断言）：
 
 ```
 === engine ===   14 checks, 0 failed   {tier: apprentice, score: 12.3}
@@ -41,7 +41,7 @@ npm run verify       # 无头 Chrome 跑 7 个浏览器场景（需本机 Chrome
 === play ===     29 checks, 0 failed   {cells: 64, hints: 26}
 === hint ===     16 checks, 0 failed   {boards: 3, hintsGiven: 90, boardsClearedByHints: 3}
 === save ===     20 checks, 0 failed   {storedBytes: 260}
-=== resume ===   17 checks, 0 failed   {name: 灯下尽头, tier: apprentice}
+=== resume ===   18 checks, 0 failed   {name: 灯下尽头, tier: apprentice}
 === layout ===   19 checks, 0 failed   {cell: 52, dpr: 1}
 === ALL GREEN ===
 ```
@@ -112,7 +112,7 @@ js/audio/synth.js     七个合成音效
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
 js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）
-tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、CDP 驱动、浏览器场景、一键验证
+tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、上线清单与部署集闸、CDP 驱动、浏览器场景、一键验证
 ```
 
 ---
@@ -129,6 +129,10 @@ tools/                引擎断言、难度实测台、文档数字闸、破坏�
 - 提示写的每一个格都必须等于唯一解的那一格——90 次提示逐格核对，不是聚合统计。
 - 满盘涂灯（明亮、非法）不判胜；同线两盏灯判 2 处冲突；撤掉一盏后冲突清零、灯数读数跟着走。
 - 撤销提示**不退**求助次数；纪录先比提示次数，再比步数，最后才比时间。
+- 总局数那本账按**等式**对：`totals.hints` 等于这一局的提示数、`totals.ms` 等于这一局的用时。
+  上一轮这一条写的是 `totals.ms > 0`，而一次性推完整盘时，冷启动要花几十毫秒、页面热过身后
+  就能落在同一毫秒里——完整序列读出 `ms: 0` 判红、单跑这一步却是绿的。现在先让计时走出一格
+  再收官，正数不再由热身顺序决定，红的時候一定是记账真的错了。
 - 存档不含解也不含墙：盘面由种子重新生成，260 字节能装下 10×10 的一局。
 
 ---
@@ -142,7 +146,7 @@ tools/                引擎断言、难度实测台、文档数字闸、破坏�
 端口对 `tools/verify.sh:17` 与 `package.json` 的 dev，CI 的接线对 `.github/workflows/ci.yml:35`
 （同一个 check job 里 40–44 行就是这两道文档闸自己的步骤）。**代码是真相**：文档与代码不一致时改文档，不许把断言改松。
 
-- 本闸 16 组 / 165 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
+- 本闸 16 组 / 174 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
   明天删掉 20 条断言，`rc=0` 也救不了这一行——闸变窄就是红。`tools/verify.sh` 的 `LOGIC_EXPECTS` 钉的是
   同一组数，两处必须一致。
 - `tools/sabotage.mjs:30` 的破坏试验台账（5 把刀）把「文档抄了一个已经不存在的数」逐类塞回代码：
@@ -151,15 +155,55 @@ tools/                引擎断言、难度实测台、文档数字闸、破坏�
 - 只有本机墙钟那一类读数不参与等式（见上一节的 ms 说明）：钉不住 ≠ 可以删，文档里删掉它台账就红。
 
 ```bash
-npm run doctest   # 文档 == 代码 / balance / engine-test 现跑（不开浏览器，秒级）
-npm run sabotage  # 破坏试验台账：五把刀各自逼红点名的断言
+npm run doctest    # 文档 == 代码 / balance / engine-test 现跑（不开浏览器，秒级）
+npm run sabotage   # 破坏试验台账：五把刀各自逼红点名的断言
+npm run deploy-set # 部署集闸：按上线那份清单拷一遍产物，再逐条核对页面会要的路径
 ```
 
-## 部署
+## 上线的到底是哪一批文件（部署集闸）
 
-`main` 分支推送 → `.github/workflows/pages.yml` 把 `index.html` + `css` + `js` 复制成静态站点
-（无打包器，也就不用打包器），再发布到 Pages。`.github/workflows/ci.yml` 在没有浏览器的情况下
-把引擎的三条承诺全部跑一遍。
+本地没有构建步骤：`index.html` 直读仓库根，所以本地永远自洽。而 Pages 上跑的
+是 `tools/assemble-site.sh` 拷出来的那一份产物。这两份东西一旦分家，坏法是**静默**的——
+引擎断言、文档数字闸、浏览器场景全都在仓库根上跑，一条都不会红，线上却是 404。
+这一轮就是它：`sw.js`、`manifest.webmanifest`、`icons/` 全套、CSS 里那张
+`assets/textures/night-field.png` 与 `js/render/sheets.js` 要的两张纹理，线上全部 404
+（`css/game.css` 是唯一还 200 的），而 workflow 里那句注释还写着「只有 index.html / css / js 可达」。
+
+`tools/deploy-set.mjs` 先把产物真拷一遍（不带参数就自己拷到临时目录，带参数就检查 CI 那份
+`_site`——**检查的就是即将上传的那一批文件**），再把页面会去要的每个字符串解析成一条路径。
+这里的关键是**基准目录**：同一个字符串在不同出处指向不同文件，全部当成站点根来算，
+既会把越级路径误判成逃逸，也会把真正缺的文件判成存在。
+
+| 出处 | 基准 | 这一仓里的实例 |
+|---|---|---|
+| `index.html` 的 `href` / `src` | 站点根 | `icons/favicon-16.png`、`manifest.webmanifest` |
+| `manifest.webmanifest` 的 `icons` / `screenshots` / `shortcuts` | manifest 自己所在目录 | 根，故直接落在 `icons/*` |
+| `css/*.css` 的 `url()` | 那支 CSS 文件所在目录 | `../assets/textures/night-field.png` → `assets/textures/…` |
+| `js/**/*.js` 的 `new URL(rel, import.meta.url)` | 那个模块所在目录 | `js/render/sheets.js` 的 `../../assets/…` |
+| `navigator.serviceWorker.register('sw.js')` | 文档基准（站点根） | HTML 里搜不到它，只看 `href` 的检查看不见这一条 |
+
+五段断言各管一种真实的坏法：A 清单与页面同源（`pages.yml` 用的就是这一支脚本）、
+B 引用可达（含「一条引用都没解析到也算红」的反空转）、C 不许绝对路径与逃逸
+（`/sw.js` 在 Pages 的 `/<repo>/` 前缀下会跳出项目站）、D 位图不许说谎（manifest 声明的
+`sizes` 必须等于 PNG 头部 IHDR 的真实宽高）、E 自钉。
+
+- 本闸 43 条断言 / 24 条引用的体量钉在 `tools/deploy-set.mjs:35-36`（`EXPECT_CHECKS` / `EXPECT_ROWS`）：
+  一个是引用条数、一个是断言条数。删掉一段断言、或者把页面里的一条引用改到闸读不到的写法上，`rc=0` 都救不了。
+  `tools/verify.sh` 的 `DEPLOY_SET_ROWS_WANT` 是同一颗钉的第二份抄本，doctest 的 D12k 要求两处相等，
+  D12q 要求文档上面那句也等于代码里的现值。
+- 接线同样有闸：D12l–D12q 逐条核对 `package.json` 有这条 script、`verify.sh` 接了它且 rc 与条数都折进
+  `FAILED`、它排在启动 Chrome 之前、`ci.yml` 的 check job 里有它、`pages.yml` 拷的就是那支清单。
+  这六条各自做过盲测（把对应文件改坏一处，看是不是**只有点名的那条**红）：六条都能红，复原逐字节一致；
+  其中 D12m 与 D12n 读的是同一个调用点，所以改坏调用点时两条一起红。少掉任何一侧都会红——
+  这道闸防的就是「CI 绿而线上 404」，它自己绝不能只在一侧跑。
+- 阴性对照两次（把刀落在**产物**上，仓库根一个字节都不动）：从 `_site` 删掉 `sw.js` →
+  `FAIL B8 sw.js … 出处 js/sw-register.js(SW注册)`，`rc=1`；挪走 `icons/icon-192.png` →
+  `FAIL B8 icons/icon-192.png …` 并且**多红一条 E1**（那张图的 D1/D2 两条尺寸核对因文件不在而没有发出来，
+  这一跑的 rows 因此比钉的少两条）。原字节放回去之后 `rc` 回到 0，`rows: 43`。
+
+`server.cjs` / `electron/` / `tools/` / 三份文档都不进站——`tools/` 里全是开发期的闸，
+把它们放进去只是把 `node_modules` 大小的东西推到公网。
+`.github/workflows/ci.yml` 在没有浏览器的情况下把引擎的三条承诺与这道部署集闸全部跑一遍。
 
 ## 许可
 

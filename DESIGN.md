@@ -165,8 +165,8 @@ Akari 的规则可以完全写成"线"上的算术，所以 `createBoard()` 在�
 ```bash
 npm test          # 77 项引擎断言（含手写期望：2×2 对角盘无解、0 号线索链条、成组规则单独发力）
 npm run balance   # 每档 40 局：分位表 + 档位阶梯门禁 + 穷举复核 + 填灯器合法性
-npm run verify    # 7 个浏览器场景 / 154 项断言，读 DOM 几何与 canvas 像素
-npm run doctest   # 文档数字闸：上面每一处数字 == 代码或本仓闸的现跑（16 组 / 165 项，体量自钉）
+npm run verify    # 7 个浏览器场景 / 155 项断言，读 DOM 几何与 canvas 像素
+npm run doctest   # 文档数字闸：上面每一处数字 == 代码或本仓闸的现跑（16 组 / 174 项，体量自钉）
 npm run sabotage  # 破坏试验台账（5 把刀）：逐类把谎塞回代码，证明上面那道闸真的会红
 ```
 

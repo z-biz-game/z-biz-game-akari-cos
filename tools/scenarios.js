@@ -428,14 +428,20 @@
 
     // A finished board must not leave a resume behind.
     A().begin({ tier: 'trainee', seed: 'browser|resume|win' });
+    // 用时是墙钟：一次把整盘推完时，冷启动要花几十毫秒、盘面已经热过身就能落在同一毫秒里
+    // （跑完整场景序列时读到的就是 ms=0，单跑这一步却是绿的）。先让表走出一格再收官，
+    // "总账里得有这一局的用时"才不赌机器快慢与热身顺序。
+    await wait(40);
     A().solveWithLogic();
     await wait(60);
     const won = A().game;
+    const wonMs = A().elapsed();
     ck('完局之后没有遗留续局', Store.resume() === null);
     ck('完局写入纪录', !!Store.best('trainee'));
     const totals = JSON.parse(localStorage.getItem('akari.save.v1')).totals;
     ck('完局计入总局数', totals.solved === 1, JSON.stringify(totals));
-    ck('总局数只数局，不重复累加提示', totals.hints === won.hints && totals.ms > 0, JSON.stringify(totals));
+    ck('总局数只数局，不重复累加提示', totals.hints === won.hints, `${totals.hints} vs ${won.hints}`);
+    ck('总账里的用时等于这一局的用时', totals.ms === wonMs && totals.ms > 0, `${totals.ms} vs ${wonMs}`);
     A().show('menu');
     await wait(30);
     ck('完局后选档不再给续局卡', !shown('#resume-card'));

@@ -31,7 +31,7 @@ const lineCount = (p) => lines(read(p));
 
 // 本闸的自钉（D16 与 verify.sh 的 LOGIC_EXPECTS 都读这两个数）：改一项就要改这里，否则红。
 const EXPECT_GROUPS = 16;
-const EXPECT_ROWS = 165; // 首次跑出来是多少就是多少，之后由它守体量
+const EXPECT_ROWS = 174; // 首次跑出来是多少就是多少，之后由它守体量
 
 const fail = [];
 const emitted = new Set();
@@ -52,6 +52,8 @@ const README = read('README.md');
 const DESIGN = read('DESIGN.md');
 const DOCS = README + '\n' + DESIGN;
 const CI = read('.github/workflows/ci.yml');
+const PAGES = read('.github/workflows/pages.yml');
+const DEPLOY_SRC = read('tools/deploy-set.mjs');
 const VERIFY = read('tools/verify.sh');
 const PKG = JSON.parse(read('package.json'));
 const BAL_SRC = read('tools/balance.mjs');
@@ -249,7 +251,14 @@ const listJs = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).fl
 });
 const JS = listJs('js');
 const jsLines = JS.reduce((a, f) => a + lineCount(f), 0);
-const SCRIPTS = ['tools/balance.mjs', 'tools/engine-test.mjs', 'tools/doctest.mjs', 'tools/sabotage.mjs', 'tools/playtest.cjs', 'tools/scenarios.js', 'tools/verify.sh'];
+// 验证脚本的名单从盘上现数，不写死。写死的时候，往 tools/ 里加一支闸不会让这一格动——
+// README 那句「7 个验证脚本」就永远是对的，哪怕 tools/ 已经有 9 支（这一轮加
+// assemble-site.sh 与 deploy-set.mjs 时暴露的就是这个：点名名单取不到新文件，
+// 尺子量的是七年前的那七个）。尺子的输入集必须等于生产者实际产出的那一集。
+const SCRIPTS = readdirSync(join(ROOT, 'tools'), { withFileTypes: true })
+  .filter((e) => e.isFile() && /\.(mjs|cjs|js|sh)$/.test(e.name))
+  .map((e) => 'tools/' + e.name)
+  .sort();
 const scriptLines = SCRIPTS.reduce((a, f) => a + lineCount(f), 0);
 const styleLines = ['css/game.css', 'index.html'].reduce((a, f) => a + lineCount(f), 0);
 const sizeDoc = README.match(/规模：(\d+) 个 ES Module \/ ([\d,]+) 行 JS \+ (\d+) 个验证脚本 \/ ([\d,]+) 行 \+ ([\d,]+) 行 CSS\/HTML，\*\*运行时依赖 (\d+) 个\*\*/) || [];
@@ -391,7 +400,7 @@ for (const c of cites) {
   const at = (read(rp).split('\n')[+c[2] - 1] || '').trim();
   if (!/[A-Za-z]/.test(at)) drift.push(`${c[1]}:${c[2]} 落在「${at || '空行'}」`);
 }
-const EXPECT_CITES = 9;
+const EXPECT_CITES = 10;
 ok(cites.length === EXPECT_CITES, `D11a 文档里的 path:NN 引用解析到 ${cites.length} 条（钉在 ${EXPECT_CITES}：删一条引用或改了引用格式都是这里红）`,
   `${cites.length} 条`);
 ok(bad.length === 0, `D11 每一条 path:NN 引用都落在真实文件的行数内（改了代码不重编行号就是这里红）`,
@@ -427,6 +436,31 @@ ok(expectMap.doctest === `${EXPECT_GROUPS}/${EXPECT_ROWS}` && expectMap.sabotage
   `D12h verify.sh 的 LOGIC_EXPECTS 钉住了本闸体量与刀数（${expectMap.doctest || '缺'} · ${expectMap.sabotage || '缺'}）—— 必须等于源码里的钉`,
   `LOGIC_EXPECTS=${expectRow || '未解析'}`);
 ok(expectMap['engine-test'] === `${engPass}`, `D12i LOGIC_EXPECTS 里 engine-test 的钉等于现跑的 ${engPass} 条`, `钉=${expectMap['engine-test']}`);
+
+// 部署集闸（第七道）的接线与它自己的两个钉。为什么要在这里再钉一遍：这一道闸读的是
+// Pages 那份产物而不是仓库根，本地与 CI 都不开浏览器就看不见它——它一旦被从 verify.sh 或
+// ci.yml 里摘掉，剩下六道闸会一起绿着把缺 sw.js 的站点放上线。
+const dsChecks = (DEPLOY_SRC.match(/^const EXPECT_CHECKS = (\d+);/m) || [])[1];
+const dsRows = (DEPLOY_SRC.match(/^const EXPECT_ROWS = (\d+);/m) || [])[1];
+ok(!!dsChecks && !!dsRows, `D12j deploy-set.mjs 的两个自钉都解析得到（EXPECT_CHECKS=${dsChecks ?? '缺'} · EXPECT_ROWS=${dsRows ?? '缺'}）`,
+  `引用钉=${dsChecks} · 断言钉=${dsRows}`);
+const dsWant = (VERIFY.match(/DEPLOY_SET_ROWS_WANT:-(\d+)/) || [])[1];
+ok(!!dsWant && +dsWant === +dsRows, `D12k verify.sh 的 DEPLOY_SET_ROWS_WANT ${dsWant ?? '缺'} == deploy-set.mjs 的 EXPECT_ROWS ${dsRows}（两处钉必须同源：改一处忘一处，闸就按旧体量判红判绿）`,
+  `verify=${dsWant} · 闸=${dsRows}`);
+ok((PKG.scripts?.['deploy-set'] || '').includes('tools/deploy-set.mjs'), 'D12l package.json 有 deploy-set 这条 script 且指向本仓 tools/',
+  `deploy-set=${PKG.scripts && PKG.scripts['deploy-set']}`);
+ok(/node "\$HERE\/tools\/deploy-set\.mjs"/.test(VERIFY) && /deploy-set\.mjs[\s\S]{0,700}?FAILED=1/.test(oneLineVerify),
+  'D12m verify.sh 接了 deploy-set，且 rc 与断言条数都折进 FAILED（跑完不折叠＝白跑）', 'rc→FAILED 与 条数→FAILED 都在');
+const dsAt = VERIFY.indexOf('node "$HERE/tools/deploy-set.mjs"');
+ok(dsAt > 0 && dsAt < browserAt, 'D12n deploy-set 排在启动 Chrome 之前（它不开浏览器，坏在产物集上不必等 Chrome）', `deploy-set@${dsAt} < chrome@${browserAt}`);
+ok(/node tools\/deploy-set\.mjs/.test(ciCheckBlock), 'D12o deploy-set 在 ci.yml 的 check job 里（本地绿＝CI 绿，不许有一侧独跑的那道闸）',
+  `check job 内含 deploy-set=${/deploy-set/.test(ciCheckBlock)}`);
+ok(/bash tools\/assemble-site\.sh/.test(PAGES), 'D12p pages.yml 拷的就是 tools/assemble-site.sh 这份清单（与 D12o 合起来才是「CI 跑的那份产物 == 上线那份」）',
+  `pages.yml 引用 assemble-site.sh=${/assemble-site\.sh/.test(PAGES)}`);
+const dsDoc = README.match(/本闸 (\d+) 条断言 \/ (\d+) 条引用的体量钉在 `tools\/deploy-set\.mjs/);
+ok(!!dsDoc && +dsDoc[1] === +dsRows && +dsDoc[2] === +dsChecks,
+  `D12q README 那句「本闸 ${dsDoc ? dsDoc[1] : '?'} 条断言 / ${dsDoc ? dsDoc[2] : '?'} 条引用」== deploy-set.mjs 的两个自钉现值（${dsRows} / ${dsChecks}）`,
+  dsDoc ? `文档=${dsDoc[1]}/${dsDoc[2]} · 代码=${dsRows}/${dsChecks}` : '文档那句解析不到（被改写就是这里红）');
 
 // ---- D13 台账本身：文档说的刀数 == sabotage.mjs 里 KNIVES 条数；刀与刀打的组不许重叠 ----
 ok(knifeIds.length >= 4, `D13a sabotage.mjs 里至少 4 把刀（当前 ${knifeIds.length} 把：${knifeIds.join(' ')}）`, `${knifeIds.length} 把：${knifeIds.join(' ')}`);
@@ -474,11 +508,17 @@ ok(+samples === +(BAL.out.match(/出题成功率 \d+\/(\d+)/) || [])[1], `D15b R
 ok(!/SAMPLES=/.test(README + DESIGN), `D15c 文档没有把 SAMPLES 的覆盖跑法写成默认值（那是手工跑的法子，见 verify.sh 注释）`, `命中=${/SAMPLES=/.test(DOCS)}`);
 
 // ---- D16 自数：这道闸自己发出的组数与项数都钉死 —— 删一条 test / 少解析一行就是这里红 ----
-const finalRows = rows + 2;
+const finalRows = rows + 3;
 const finalGroups = emitted.size + (emitted.has('D16') ? 0 : 1);
 ok(finalGroups === EXPECT_GROUPS, `D16a 本闸发出 ${finalGroups} 组 D 标签（钉在 ${EXPECT_GROUPS}；删一组就是这里红）`,
   [...emitted, 'D16'].sort((a, b) => +a.slice(1) - +b.slice(1)).join(' '));
 ok(finalRows === EXPECT_ROWS, `D16b 本闸项数 == 钉的 ${EXPECT_ROWS}（增/删一条 ok() 都要改这里；不改就是这里红）`, `本次累计 ${finalRows} 项`);
+// 文档里抄的「N 组 / M 项」是本闸体量的对外说法，光钉代码不够：README 与 DESIGN 各抄一份，
+// 加一条断言只改代码就会留下一个过期的对外数字（这一轮就从 165 涨到 174，两处都得跟着走）。
+const docSize = [...DOCS.matchAll(/(\d+) 组 \/ (\d+) 项/g)];
+ok(docSize.length === 2 && docSize.every((m) => +m[1] === EXPECT_GROUPS && +m[2] === EXPECT_ROWS),
+  `D16c 文档两处「N 组 / M 项」都等于本闸的钉（${EXPECT_GROUPS}/${EXPECT_ROWS}；解析到 ${docSize.length} 处）`,
+  docSize.map((m) => `${m[1]}/${m[2]}`).join(' · ') || '未解析');
 
 console.log(`\n合计 ${rows} 项，${fail.length} 项失败`);
 console.log(`GATE_SIZE groups=${finalGroups} rows=${finalRows} fail=${fail.length}`);
