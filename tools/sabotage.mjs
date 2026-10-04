@@ -54,9 +54,9 @@ const KNIVES = [
   },
   {
     id: 'K4', group: 'D8', file: 'tools/scenarios.js',
-    from: 'w.__ng = { engine, gen, play, hint, save, resume, layout };', to: 'w.__ng = { engine, gen, play, hint, save, resume };',
-    breaks: '从浏览器场景注册表里摘掉 layout（verify.sh 默认还要跑 7 个场景，文档也写 7 个）',
-    assert: /FAIL D8a 场景集解析到 7（verify\.sh 默认）\/ 6/m,
+    from: 'w.__ng = { engine, gen, play, hint, save, resume, layout, pause };', to: 'w.__ng = { engine, gen, play, hint, save, resume, layout };',
+    breaks: '从浏览器场景注册表里摘掉 pause（verify.sh 默认还要跑 8 个场景，文档也写 8 个）',
+    assert: /FAIL D8a 场景集解析到 8（verify\.sh 默认）\/ 7/m,
     rc: '1',
   },
   {

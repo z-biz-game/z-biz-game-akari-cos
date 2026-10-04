@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-shot browser verification: real Chrome, real DOM, scripted scenarios.
 #
-#   ./tools/verify.sh                 # engine + gen + play + hint + save/resume + layout
+#   ./tools/verify.sh                 # engine + gen + play + hint + save/resume + layout + pause
 #   SCENARIOS="play hint" ./tools/verify.sh
 #   BASE_URL=https://z-biz-game.github.io/z-biz-game-akari-cos/ ./tools/verify.sh
 #
@@ -134,7 +134,7 @@ echo "boot: akari $BOOT at $BASE"
 [ "$BOOT" = "nope" ] && { echo "window.akari never appeared at $BASE" >&2; exit 4; }
 
 # FAILED 已在本脚本开头的逻辑闸段落初始化为 0（浏览器循环再清一次会把逻辑闸的红擦掉）。
-for s in ${SCENARIOS:-engine gen play hint save resume layout}; do
+for s in ${SCENARIOS:-engine gen play hint save resume layout pause}; do
   echo "=== $s ==="
   node tools/playtest.cjs scenario "$s" 2>/tmp/akari-$s.console.log | tail -1 | sed 's/^RESULT //' | python3 -c "
 import sys, json

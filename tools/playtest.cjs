@@ -109,10 +109,10 @@ async function main() {
   await cdp.send('Log.enable', {}, sessionId);
   await cdp.send('Page.enable', {}, sessionId);
 
-  const evaluate = async (expression) => {
+  const evaluate = async (expression, userGesture = false) => {
     const r = await cdp.send(
       'Runtime.evaluate',
-      { expression, returnByValue: true, awaitPromise: true, timeout: 900000 },
+      { expression, returnByValue: true, awaitPromise: true, timeout: 900000, userGesture },
       sessionId
     );
     if (r.exceptionDetails) {
@@ -147,11 +147,16 @@ async function main() {
     // against a browser that is only pretending to be in the background.
     await evaluate(`Object.defineProperty(document,'hidden',{get:()=>false,configurable:true});
       Object.defineProperty(document,'visibilityState',{get:()=>'visible',configurable:true});'ok'`);
+    // The fullscreen assertion needs two things the game does not control: requestFullscreen()
+    // is refused without transient user activation (hence userGesture on the scenario call), and
+    // a tab that is not topmost reports document.hasFocus() === false, which Chrome also refuses.
+    await cdp.send('Page.bringToFront', {}, sessionId);
+    await sleep(120);
     const out = await evaluate(`(async()=>{
       if (!window.__ng) throw new Error('scenarios.js never installed');
       const r = await window.__ng[${JSON.stringify(arg)}]();
       return JSON.stringify(r);
-    })()`);
+    })()`, true);
     // Console noise first, machine-readable line last: the parser in verify.sh takes the
     // final RESULT line, so a stray '{' in a log cannot hijack the report.
     if (logs.length) console.error(logs.slice(-40).join('\n'));

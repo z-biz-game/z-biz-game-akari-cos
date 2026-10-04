@@ -275,12 +275,12 @@ const moduleDocList = (README.slice(README.indexOf('## 目录'), README.indexOf(
 ok(moduleDocList.length === JS.length, `D7h README「目录」里点名的 js 文件有 ${moduleDocList.length} 个 == 磁盘上的 ${JS.length} 个（新增模块必须同时写进目录）`,
   `目录 ${moduleDocList.length} · 磁盘 ${JS.length}`);
 
-// ---- D8 浏览器场景表：verify.sh 默认集 == scenarios.js 注册表 == 文档抄的那七行 ----
+// ---- D8 浏览器场景表：verify.sh 默认集 == scenarios.js 注册表 == 文档抄的那八行 ----
 const scenDefault = (VERIFY.match(/for s in \$\{SCENARIOS:-(.*?)\}/) || [, ''])[1].trim().split(/\s+/).filter(Boolean);
 const registry = ((SCEN.match(/w\.__ng = \{([^}]+)\}/) || [])[1] || '').split(',').map((s) => s.trim()).filter(Boolean);
-ok(scenDefault.length === 7 && registry.length === 7,
-  `D8a 场景集解析到 ${scenDefault.length}（verify.sh 默认）/ ${registry.length}（scenarios.js 注册表），钉在 7`, `${scenDefault.join(' ')} || ${registry.join(' ')}`);
-ok(scenDefault.join('|') === registry.join('|'), `D8b verify.sh 默认跑的 7 个场景与 scenarios.js 的注册名逐字同序`,
+ok(scenDefault.length === 8 && registry.length === 8,
+  `D8a 场景集解析到 ${scenDefault.length}（verify.sh 默认）/ ${registry.length}（scenarios.js 注册表），钉在 8`, `${scenDefault.join(' ')} || ${registry.join(' ')}`);
+ok(scenDefault.join('|') === registry.join('|'), `D8b verify.sh 默认跑的 8 个场景与 scenarios.js 的注册名逐字同序`,
   `verify ${scenDefault.join(' ')} · registry ${registry.join(' ')}`);
 const outRows = [...README.matchAll(/^=== (\w+) ===\s+(\d+) checks, (\d+) failed\s+(\{.*\})$/gm)].map((m) => ({ name: m[1], checks: +m[2], bad: +m[3], extra: m[4] }));
 ok(outRows.length === scenDefault.length && outRows.every((r, i) => r.name === scenDefault[i]),

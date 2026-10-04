@@ -13,7 +13,7 @@
   钉在哪一格；推不出东西时它不收钱，只说"当前没有可推导的格"。
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
-- 规模：14 个 ES Module / 2,846 行 JS + 10 个验证脚本 / 2,870 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 2,846 行 JS + 10 个验证脚本 / 3,070 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -30,10 +30,10 @@ npm run electron     # 桌面壳（electron/main.cjs，同一份代码）
 npm run check        # 逐文件 node --check 语法门禁
 npm test             # 引擎断言 77 项：规则可靠性 / 生成保证 / 状态机 / 存档形状
 npm run balance      # 难度实测台：每档分数分位、入选率、求解代价、档位阶梯门禁
-npm run verify       # 无头 Chrome 跑 7 个浏览器场景（需本机 Chrome，见下）
+npm run verify       # 无头 Chrome 跑 8 个浏览器场景（需本机 Chrome，见下）
 ```
 
-`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 155 项断言）：
+`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 188 项断言）：
 
 ```
 === engine ===   14 checks, 0 failed   {tier: apprentice, score: 12.3}
@@ -43,6 +43,7 @@ npm run verify       # 无头 Chrome 跑 7 个浏览器场景（需本机 Chrome
 === save ===     20 checks, 0 failed   {storedBytes: 260}
 === resume ===   18 checks, 0 failed   {name: 灯下尽头, tier: apprentice}
 === layout ===   19 checks, 0 failed   {cell: 52, dpr: 1}
+=== pause ===    33 checks, 0 failed   {fs: entered, frozen: 0, frozen2: 0, errs: 0}
 === ALL GREEN ===
 ```
 
@@ -132,6 +133,11 @@ tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当�
 - 提示写的每一个格都必须等于唯一解的那一格——90 次提示逐格核对，不是聚合统计。
 - 满盘涂灯（明亮、非法）不判胜；同线两盏灯判 2 处冲突；撤掉一盏后冲突清零、灯数读数跟着走。
 - 撤销提示**不退**求助次数；纪录先比提示次数，再比步数，最后才比时间。
+- 遮罩上那句「表停在这里，盘面也不接受落子」有 33 条断言替它担保：暂停 700 ms 之后时钟 Δ 恰好是 0
+  （不是「变慢了」）、玩家看到的那一格计时读数一字不变、真实指针点下去既不记账也不落墨；卡上写的
+  「按 P 或 空格 继续」两个键都得松开表，且恢复的第一帧不把暂停期间的墙钟灌回来；暂停中换一局，
+  新局一定在走（按钮、遮罩与时钟不许各说各话）。顶栏那颗 #btn-fullscreen 也一样：进得去就要退得来，
+  进不去就要禁用 + 一句人话理由，不许默默没反应。
 - 总局数那本账按**等式**对：`totals.hints` 等于这一局的提示数、`totals.ms` 等于这一局的用时。
   上一轮这一条写的是 `totals.ms > 0`，而一次性推完整盘时，冷启动要花几十毫秒、页面热过身后
   就能落在同一毫秒里——完整序列读出 `ms: 0` 判红、单跑这一步却是绿的。现在先让计时走出一格
