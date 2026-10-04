@@ -13,7 +13,7 @@
   钉在哪一格；推不出东西时它不收钱，只说"当前没有可推导的格"。
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
-- 规模：14 个 ES Module / 2,846 行 JS + 9 个验证脚本 / 2,406 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 2,846 行 JS + 10 个验证脚本 / 2,870 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -112,10 +112,13 @@ js/audio/synth.js     七个合成音效
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
 js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）
-tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、上线清单与部署集闸、CDP 驱动、浏览器场景、一键验证
+tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、上线清单与部署集闸、CDP 驱动、浏览器场景、一键验证 / tools/assemble-site / tools/deploy-set / tools/deploy-set-selftest
 ```
 
 ---
+tools/assemble-site.sh  部署产物的唯一清单（pages.yml 与本地闸调同一支）
+tools/deploy-set.mjs  部署集闸：检查即将上传的那份产物
+tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当场打红一次）
 
 ## 验证在验证什么
 
@@ -187,12 +190,15 @@ npm run deploy-set # 部署集闸：按上线那份清单拷一遍产物，再�
 | `js/**/*.js` 的 `new URL(rel, import.meta.url)` | 那个模块所在目录 | `js/render/sheets.js` 的 `../../assets/…` |
 | `navigator.serviceWorker.register('sw.js')` | 文档基准（站点根） | HTML 里搜不到它，只看 `href` 的检查看不见这一条 |
 
-五段断言各管一种真实的坏法：A 清单与页面同源（`pages.yml` 用的就是这一支脚本）、
-B 引用可达（含「一条引用都没解析到也算红」的反空转）、C 不许绝对路径与逃逸
-（`/sw.js` 在 Pages 的 `/<repo>/` 前缀下会跳出项目站）、D 位图不许说谎（manifest 声明的
-`sizes` 必须等于 PNG 头部 IHDR 的真实宽高）、E 自钉。
+三段断言各管一种真实的坏法：W 清单与页面同源（`pages.yml` 里必须真有 `run: bash tools/assemble-site.sh <dir>`
+那一行、`ci.yml` 里必须真有 `run: node tools/deploy-set.mjs`——认的是调用那一行，不是文件里出现过这个路径，
+否则一句散文就能把它喂绿）、R 引用可达（从 `index.html` 的 `href/src` 出发，凡解析出来是 `.js`/`.css` 的
+就把那一站也扫一遍，manifest 的 icons/screenshots/shortcuts 各自的 `src` 也算引用；含「一条引用都没解析到
+也算红」的反空转，以及「不许绝对路径与逃逸」——`/sw.js` 在 Pages 的 `/<repo>/` 前缀下会跳出项目站）、
+P 位图不许说谎（manifest 声明的 `sizes` 必须等于 PNG 头部 IHDR 的真实宽高：文件图标读文件头，
+内联成 base64 的图标先解码再读同一段——本仓那枚分发母本就是内联的，只筛文件名的话它一路不被核）。
 
-- 本闸 43 条断言 / 24 条引用的体量钉在 `tools/deploy-set.mjs:35-36`（`EXPECT_CHECKS` / `EXPECT_ROWS`）：
+- 本闸 85 条断言 / 51 条引用的体量钉在 `tools/deploy-set.mjs:34-38`（`EXPECT_CHECKS` / `EXPECT_ROWS`）：
   一个是引用条数、一个是断言条数。删掉一段断言、或者把页面里的一条引用改到闸读不到的写法上，`rc=0` 都救不了。
   `tools/verify.sh` 的 `DEPLOY_SET_ROWS_WANT` 是同一颗钉的第二份抄本，doctest 的 D12k 要求两处相等，
   D12q 要求文档上面那句也等于代码里的现值。
@@ -201,10 +207,12 @@ B 引用可达（含「一条引用都没解析到也算红」的反空转）、
   这六条各自做过盲测（把对应文件改坏一处，看是不是**只有点名的那条**红）：六条都能红，复原逐字节一致；
   其中 D12m 与 D12n 读的是同一个调用点，所以改坏调用点时两条一起红。少掉任何一侧都会红——
   这道闸防的就是「CI 绿而线上 404」，它自己绝不能只在一侧跑。
-- 阴性对照两次（把刀落在**产物**上，仓库根一个字节都不动）：从 `_site` 删掉 `sw.js` →
-  `FAIL B8 sw.js … 出处 js/sw-register.js(SW注册)`，`rc=1`；挪走 `icons/icon-192.png` →
-  `FAIL B8 icons/icon-192.png …` 并且**多红一条 E1**（那张图的 D1/D2 两条尺寸核对因文件不在而没有发出来，
-  这一跑的 rows 因此比钉的少两条）。原字节放回去之后 `rc` 回到 0，`rows: 43`。
+- 阴性对照两次（把刀落在**产物**上，仓库根一个字节都不动，`bash tools/assemble-site.sh _site` 先拷出
+  一份干净的）：从 `_site` 删掉 `sw.js` → `FAIL R10 sw.js 在部署产物里且非 0 字节 · 出处 js/sw-register.js`，
+  `rc=1`，`rows: 85` 一条不少（那条引用还在，只是判红）；换一份干净产物只挪走 `icons/icon-192.png` →
+  `FAIL R10 icons/icon-192.png …` **两条**（同一张图分别被 `index.html` 与 `manifest.icons` 要）
+  并且**多红一条 R13**（那张图的 P1/P2 两条尺寸核对因文件不在而没有发出来，这一跑的 rows 于是比钉的少两条，
+  实际 83 条）。原字节放回去之后 `rc` 回到 0，`rows: 85`。
 
 `server.cjs` / `electron/` / `tools/` / 三份文档都不进站——`tools/` 里全是开发期的闸，
 把它们放进去只是把 `node_modules` 大小的东西推到公网。

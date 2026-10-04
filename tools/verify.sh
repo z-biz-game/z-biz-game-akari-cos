@@ -58,7 +58,7 @@ rm -f "$LOGIC_LOG"
 # 钉的是这个闸自己的断言条数：rc=0 也可能是闸少了断言之后跑出来的 0。这颗钉只在这里取一次
 # （DEPLOY_SET_ROWS_WANT），下面两处判定都读同一个变量——抄两遍就有两个会漂的副本。
 echo "=== 部署集闸 tools/deploy-set.mjs（引用 == 产物）==="
-DS_WANT=${DEPLOY_SET_ROWS_WANT:-43}
+DS_WANT=${DEPLOY_SET_ROWS_WANT:-85}
 DS_LOG="$HERE/_tmp-verify-deploy-set.log"
 node "$HERE/tools/deploy-set.mjs" >"$DS_LOG" 2>&1
 DS_RC=$?
