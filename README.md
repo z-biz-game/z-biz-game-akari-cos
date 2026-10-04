@@ -112,7 +112,7 @@ js/audio/synth.js     七个合成音效
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
 js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）
-tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、上线清单与部署集闸、CDP 驱动、浏览器场景、一键验证 / tools/assemble-site / tools/deploy-set / tools/deploy-set-selftest
+tools/                引擎断言、难度实测台、文档数字闸、破坏试验台账、上线清单与部署集闸、CDP 驱动、浏览器场景、一键验证
 ```
 
 ---

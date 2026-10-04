@@ -42,7 +42,7 @@ node "$HERE/tools/doctest.mjs" >"$LOGIC_LOG" 2>&1 || FAILED=1
 grep '^  FAIL' "$LOGIC_LOG" | head -25
 DS=$(sed -n 's/^GATE_SIZE groups=\([0-9]*\) rows=\([0-9]*\) fail=\([0-9]*\).*/\1\/\2/p' "$LOGIC_LOG" | head -1)
 if [ "$DS" = "$(pin_of doctest)" ]; then
-  echo "  doctest：${DS%/*} 组 / ${DS#*/} 项（钉 $DS）✓"
+  echo "  doctest：${DS%/*} 组 / ${DS#*/} 项（钉 ${DS}）✓"
 else
   echo "  doctest 体量 ${DS:-未打印 GATE_SIZE} != 钉的 $(pin_of doctest) —— 闸变窄或跑不起来都是红" >&2
   FAILED=1
@@ -65,7 +65,7 @@ DS_RC=$?
 DS_ROWS=$(sed -n 's/^rows: \([0-9]*\) .*$/\1/p' "$DS_LOG" | tail -1)
 cat "$DS_LOG"
 rm -f "$DS_LOG"
-[ "$DS_RC" = 0 ] || { echo "  deploy-set 红：产物里缺页面会去要的路径（rc=$DS_RC）" >&2; FAILED=1; }
+[ "$DS_RC" = 0 ] || { echo "  deploy-set 红：产物里缺页面会去要的路径（rc=${DS_RC}）" >&2; FAILED=1; }
 if [ "${DS_ROWS:-0}" != "$DS_WANT" ]; then
   echo "  deploy-set 断言条数 ${DS_ROWS:-未打印 rows:} != 钉的 $DS_WANT" >&2
   FAILED=1
