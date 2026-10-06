@@ -152,8 +152,10 @@ tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当�
 现值，六条铅笔规则读 `js/engine/akari.js:19-26` 的 `Rules` 现值，成组枚举上限读 `js/engine/akari.js:214`
 那一行的 `open.length > 12`，分位与入选是现场跑一遍 `tools/balance.mjs`（每档张数由
 `tools/balance.mjs:13` 的 `SAMPLES` 决定），77 项引擎断言是现场跑一遍 `tools/engine-test.mjs`，
-端口对 `tools/verify.sh:17` 与 `package.json` 的 dev，CI 的接线对 `.github/workflows/ci.yml:35`
-（同一个 check job 里 40–44 行就是这两道文档闸自己的步骤）。**代码是真相**：文档与代码不一致时改文档，不许把断言改松。
+端口对 `tools/verify.sh:17` 与 `package.json` 的 dev，CI 的接线对 `.github/workflows/ci.yml:29-30`
+（同一个 check job 里 35–39 行就是这两道文档闸自己的步骤；这两处行号刚跟着一次接线搬家——
+`Syntax check every source` 那一步以前自己抄了 5 行 `git ls-files` 循环，现在只剩 `run: npm run check`
+一行，与本地同一条命令，于是下面所有步骤整体上移 5 行）。**代码是真相**：文档与代码不一致时改文档，不许把断言改松。
 
 - 本闸 16 组 / 174 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
   明天删掉 20 条断言，`rc=0` 也救不了这一行——闸变窄就是红。`tools/verify.sh` 的 `LOGIC_EXPECTS` 钉的是
