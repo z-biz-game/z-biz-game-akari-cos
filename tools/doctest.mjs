@@ -381,7 +381,7 @@ for (const [file, what, srcRe] of ANCHORS) {
 }
 
 // ---- D11 泛引用范围：README + DESIGN 里每一条 path:NN 都落在真实文件的行数内 ----
-const cites = [...DOCS.matchAll(/((?:\.github\/workflows\/|js\/|tools\/|css\/)?[\w./-]+\.(?:js|mjs|cjs|sh|json|html|yml)):(\d+)(?:-(\d+))?/g)];
+const cites = [...DOCS.matchAll(/((?:\.github\/workflows\/|js\/|tools\/|css\/)?[\w./-]+\.[A-Za-z][A-Za-z0-9]{0,11}):(\d+)(?:-(\d+))?/g)];
 const resolve = (p) => {
   if (existsSync(join(ROOT, p))) return p;
   const base = p.split('/').pop();
