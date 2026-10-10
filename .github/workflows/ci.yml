@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: syntax + engine guarantees
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # No npm install: the game has zero runtime dependencies, and pulling Electron into
+      # CI to prove nothing is how a repo starts failing on a network flake.
+      - name: Syntax check every source
+        run: npm run check
+
+      # The real gate: every generated board must have one solution and be reachable by
+      # pencil logic. This is a plain Node test, so it guards merges without a browser.
+      - name: Engine tests
+        run: node tools/engine-test.mjs
+
+      # 文档诚实两道闸：doctest 把 README/DESIGN 里每个数字与代码或本仓闸的现跑对表；
+      # sabotage 用五把刀把同一批断言逐类逼红，证明这些绿是被守住的而不是解析器集体扑空。
+      # 都是纯 node（balance / engine-test 现场跑），不开浏览器，所以合入门禁也跑得动。
+      - name: Doc numbers equal code (doctest)
+        run: node tools/doctest.mjs
+
+      - name: Sabotage ledger trips every assertion group
+        run: node tools/sabotage.mjs
+
+      - name: Entry files exist
+        run: test -f index.html && grep -q '<canvas' index.html && grep -q 'js/main.js' index.html
+
+      # 部署集闸：跑的是 tools/assemble-site.sh 拷出来的那份产物，不是仓库根。
+      # 插在 40–44 之后是有意的——README 里那句「同一个 check job 里 40–44 行就是这两道文档闸
+      # 自己的步骤」是按行号引的，插在上面会让那个引用指向隔壁的断言。
+      - name: Deploy set carries every referenced path
+        run: node tools/deploy-set.mjs
+
+  # 真浏览器闸：headless Chrome + CDP，读 DOM 文本/几何与画布像素，不读内部标志位。
+  # 独立 job，node 22 而不是 check job 的 20：台架是裸 CDP 驱动，用的是 Node 22 才有的全局
+  # WebSocket/fetch；在 20 上第一次 attach 就死在 "WebSocket is not defined"，一条断言都跑不到。
+  browser:
+    name: real browser gate (both URL shapes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # 154 项浏览器断言（7 个场景 engine gen play hint save resume layout）在两种 URL 形态下的条数逐条相同，是 2026-09-28 在本机实跑出来的，
+      # 不是引用。在这一步之前 CI 一步都没跑过 tools/verify.sh：闸是写了给人看的，不是给人跑的。
+      - name: Browser gate, root shape
+        env:
+          WD_TIMEOUT: 900
+        run: bash tools/verify.sh
+
+      # Pages 把这个仓发在 /z-biz-game-akari-cos/ 之下，而根形态的服务方式分辨不出斜杠开头的 import——
+      # 同组织已经因此红过一次（部署站上 404，本地闸全绿）。所以前缀形态也是闸的一部分。
+      - name: Browser gate, prefix shape (how Pages serves us)
+        env:
+          WD_TIMEOUT: 900
+        run: |
+          root=$(mktemp -d)
+          ln -s "$GITHUB_WORKSPACE" "$root/z-biz-game-akari-cos"
+          python3 -m http.server 5500 --bind 127.0.0.1 --directory "$root" &
+          SERVER=$!
+          trap 'kill $SERVER 2>/dev/null' EXIT
+          for i in $(seq 1 40); do
+            curl -fsS -m 2 "http://127.0.0.1:5500/z-biz-game-akari-cos/" >/dev/null 2>&1 && break
+            sleep 0.25
+          done
+          curl -fsS -m 3 "http://127.0.0.1:5500/z-biz-game-akari-cos/js/main.js" >/dev/null
+          curl -fsS -m 3 "http://127.0.0.1:5500/z-biz-game-akari-cos/js/engine/akari.js" >/dev/null
+          BASE_URL=http://127.0.0.1:5500/z-biz-game-akari-cos/ bash tools/verify.sh

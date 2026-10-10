@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#080B16" />
+<title>明路 · Akari 灯塔推理</title>
+<meta name="description" content="Akari 灯塔谜题：每局唯一解、每局都能用逻辑推到底，提示只给可推导的格。" />
+<!-- 图标全部指向盘上真实 PNG（由 assets/gen/make_art.py 产出）。显式声明 icon 链接
+     仍然解决了旧注释担心的那件事：浏览器不会再去 Pages 域根探 /favicon.ico 并留一条 404。 -->
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="48x48" href="icons/icon-48.png" />
+<link rel="icon" type="image/png" sizes="96x96" href="icons/icon-96.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="明路" />
+<meta name="color-scheme" content="dark" />
+<meta name="format-detection" content="telephone=no" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="明路 · Akari 灯塔推理" />
+<meta property="og:description" content="每局唯一解、每局都能用逻辑推到底：灯沿直线照亮走廊，墙会挡光，数字写着它四邻放了几盏灯。" />
+<meta property="og:image" content="https://z-biz-game.github.io/z-biz-game-akari-cos/assets/og/akari-og-1200x630.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="夜色棋盘上的一盏灯：五档难度、六条铅笔规则、零猜测" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="明路 · Akari 灯塔推理" />
+<meta name="twitter:description" content="每局唯一解、每局都能用逻辑推到底，提示只给可推导的格。" />
+<meta name="twitter:image" content="https://z-biz-game.github.io/z-biz-game-akari-cos/assets/og/akari-og-1200x630.png" />
+<link rel="stylesheet" href="css/game.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>明路</h1>
+      <p class="sub">Akari · 灯塔推理</p>
+    </div>
+    <div class="top-actions">
+      <button id="btn-help" class="ghost" type="button" aria-pressed="false" aria-controls="view-help">玩法教学</button>
+      <button id="btn-sound" class="ghost" type="button" aria-pressed="true">音效 开</button>
+      <button id="btn-motion" class="ghost" type="button" aria-pressed="false">动效 全</button>
+      <button id="btn-fullscreen" class="ghost" type="button" aria-pressed="false">全屏</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="view-menu" class="view">
+      <div class="menu-hero">
+        <h2>把整片夜色照亮，但不让两盏灯照面</h2>
+        <p>
+          灯沿直线照亮整条走廊，墙会挡光；两盏灯不能在同一条直线上互相照到。
+          墙上的数字写着它四邻放了几盏灯。这里没有运气题——每一局都能靠逻辑推到底。
+        </p>
+      </div>
+
+      <div class="menu-cols">
+        <div class="col">
+          <h3 class="col-title">选一档</h3>
+          <div id="tier-list" class="tiers"></div>
+          <div id="resume-card" class="resume" hidden>
+            <div class="resume-txt">
+              <strong id="resume-name">未完成的牌局</strong>
+              <span id="resume-meta"></span>
+            </div>
+            <button id="btn-resume" class="primary" type="button">继续</button>
+          </div>
+        </div>
+
+        <div class="col">
+          <h3 class="col-title">纪录（同档比：先看不求提示几次，再看步数，最后看时间）</h3>
+          <ul id="record-list" class="records"></ul>
+
+          <h3 class="col-title">你会用到的六条规则</h3>
+          <ol class="rules">
+            <li><b>线索凑满</b>：还差的灯数正好等于还能放的格数，那些格全是灯。</li>
+            <li><b>线索闭合</b>：数字已经满足，其余邻格一律不能放。</li>
+            <li><b>线索成组</b>：共邻的几处线索是一份约束，能同时满足的摆法只有一种。</li>
+            <li><b>灯光直照</b>：一盏灯照亮整条线，这条线上再放不下第二盏。</li>
+            <li><b>唯一光源</b>：有个空格只剩一处能照到它，那处必是灯。</li>
+            <li><b>反证</b>：假设这里放灯（或不放）会让盘面矛盾，假设就反了。</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-game" class="view" hidden>
+      <div class="stage">
+        <div class="stage-head">
+          <span id="stat-name" class="puzzle-name">—</span>
+          <span id="stat-tier" class="chip">—</span>
+          <span id="stat-time" class="chip mono">00:00</span>
+        </div>
+        <div id="board-wrap">
+          <canvas id="board" role="img" aria-label="灯棋盘：墙上有数字，格子里放灯或画叉"></canvas>
+          <div id="win-veil" hidden>
+            <div class="win-card">
+              <h3>整片亮了</h3>
+              <p id="win-meta"></p>
+              <p id="win-record" class="win-record"></p>
+              <div class="win-actions">
+                <button id="btn-again" class="primary" type="button">再来一局</button>
+                <button id="btn-menu-2" class="ghost" type="button">回选档</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="pause-veil" hidden>
+          <div class="pause-card">
+            <h3>已暂停</h3>
+            <p>表停在这里，盘面也不接受落子。按 <b>P</b> 或 <b>空格</b> 继续。</p>
+            <div class="pause-actions">
+              <button id="btn-resume-play" class="primary" type="button">继续这一局</button>
+              <button id="btn-restart" class="ghost" type="button">重开本局</button>
+            </div>
+          </div>
+        </div>
+        <p id="conflict-line" class="conflict-line" aria-live="polite"></p>
+      </div>
+
+      <aside class="panel">
+        <div class="modes" role="group" aria-label="落子模式">
+          <button id="btn-mode-bulb" class="mode" type="button" aria-pressed="true">放灯</button>
+          <button id="btn-mode-mark" class="mode" type="button" aria-pressed="false">画叉</button>
+        </div>
+        <div class="acts">
+          <button id="btn-hint" class="primary" type="button">提示<span class="mono" id="hint-count">0</span></button>
+          <button id="btn-undo" class="ghost" type="button">撤销</button>
+          <button id="btn-pause" class="ghost" type="button" aria-pressed="false">暂停</button>
+          <button id="btn-restart-2" class="ghost" type="button">重开本局</button>
+          <button id="btn-new" class="ghost" type="button">换一局</button>
+          <button id="btn-menu" class="ghost" type="button">回选档</button>
+        </div>
+
+        <div class="stats">
+          <div class="stat"><span>步数</span><b id="stat-moves" class="mono">0</b></div>
+          <div class="stat"><span>提示</span><b id="stat-hints" class="mono">0</b></div>
+          <div class="stat"><span>灯</span><b id="stat-bulbs" class="mono">0</b></div>
+          <div class="stat"><span>冲突</span><b id="stat-conflicts" class="mono">0</b></div>
+          <div class="stat"><span>没照亮的格</span><b id="stat-unlit" class="mono">0</b></div>
+          <div class="stat"><span>难度实测</span><b id="stat-score" class="mono">—</b></div>
+        </div>
+
+        <div class="hint-box">
+          <h4 id="hint-rule">提示理由</h4>
+          <p id="hint-line">按 <b>提示</b> 会说出当前能推的一步，以及它依据哪条规则。</p>
+        </div>
+
+        <div class="legend">
+          <span><i class="sw sw-lamp"></i>灯</span>
+          <span><i class="sw sw-glow"></i>被照亮的线</span>
+          <span><i class="sw sw-cross"></i>铅笔叉</span>
+          <span><i class="sw sw-dark"></i>还没照亮</span>
+          <span><i class="sw sw-bad"></i>冲突</span>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <section id="view-help" class="help" hidden role="dialog" aria-modal="true" aria-labelledby="help-title">
+    <div class="help-card">
+      <h2 id="help-title">玩法教学 · 两分钟上手</h2>
+      <p class="help-lead">目标：把盘面上每一个空格都照亮。规则只有三条硬约束——
+        灯沿直线照亮整行整列，墙会挡光；两盏灯不能在同一条直线上互相照到；
+        墙上的数字写着它上下左右四邻一共放了几盏灯。这里没有运气题，每一局都能靠逻辑推到底。</p>
+      <div class="help-cols">
+        <div>
+          <h3>先读盘面</h3>
+          <ol class="rules">
+            <li><b>冷格</b>是还没被照亮的空格，<b>暖格</b>已经被某盏灯照到。</li>
+            <li><b>放灯</b>模式点一格落一盏灯；<b>画叉</b>模式记一笔"这里放不下"。</li>
+            <li>按住拖动可以一次画一条线，一次拖动算一步，撤销也一次收回整条。</li>
+            <li>数字变绿说明它四邻的灯数已经凑满；变红说明超了，盘面已经矛盾。</li>
+          </ol>
+          <h3>推不动的时候</h3>
+          <p class="help-note"><b>提示</b>（按 <b>I</b>）只会写出当前真能推的一步，并说出它依据哪条规则；
+            推不出来的格它不给，也就不花你的"提示次数"。纪录先比谁求人的次数少。</p>
+        </div>
+        <div>
+          <h3>六条铅笔规则</h3>
+          <ol class="rules">
+            <li><b>线索凑满</b>：还差的灯数正好等于还能放的格数，那些格全是灯。</li>
+            <li><b>线索闭合</b>：数字已经满足，其余邻格一律不能放。</li>
+            <li><b>线索成组</b>：共邻的几处线索是一份约束，能同时满足的摆法只有一种。</li>
+            <li><b>灯光直照</b>：一盏灯照亮整条线，这条线上再放不下第二盏。</li>
+            <li><b>唯一光源</b>：有个空格只剩一处能照到它，那处必是灯。</li>
+            <li><b>反证</b>：假设这里放灯（或不放）会让盘面矛盾，假设就反了。</li>
+          </ol>
+          <h3>键盘</h3>
+          <dl id="help-keys" class="keys"></dl>
+        </div>
+      </div>
+      <div class="help-actions">
+        <button id="btn-help-close" class="primary" type="button">开始推理</button>
+        <span class="help-tip">按 <b>H</b> 或 <b>Esc</b> 随时开关这一页</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>每局唯一解 · 每局可用逻辑推出 · 提示只给可推导的格 — 由 <code>tools/verify.sh</code> 在真实浏览器里逐条断言。</span>
+    <button id="btn-reset" class="link" type="button">清空存档</button>
+  </footer>
+</div>
+
+<script src="js/sw-register.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

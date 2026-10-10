@@ -1,0 +1,92 @@
+{
+ "files": {
+  "assets/og/akari-og-1200x630.png": {
+   "bytes": 415685,
+   "h": 630,
+   "sha256": "6e843ec30a52f115c217a662fdb161c2901ba37f57f8e1e5581fa2e2733dd224",
+   "w": 1200
+  },
+  "assets/textures/lamp-halo-bad.png": {
+   "bytes": 8241,
+   "h": 256,
+   "sha256": "db5d1c96b929baf3efc832f10310c620427d6f3281f1394de39c4b1de96be737",
+   "w": 256
+  },
+  "assets/textures/lamp-halo.png": {
+   "bytes": 8360,
+   "h": 256,
+   "sha256": "2bea37d7dd54ac3100a88f6ee696d79e809065c5549c9872d08a072f7615a88e",
+   "w": 256
+  },
+  "assets/textures/night-field.png": {
+   "bytes": 6642,
+   "h": 512,
+   "sha256": "ce28875f23505a0bfb1c3db48906c043d952d54e1fd7295907730dbc48c88134",
+   "w": 512
+  },
+  "assets/textures/spark.png": {
+   "bytes": 1751,
+   "h": 64,
+   "sha256": "88b08e756455514385599766cbef820667195b87b61ef6781d83efb4d032afcf",
+   "w": 64
+  },
+  "icons/apple-touch-icon.png": {
+   "bytes": 32885,
+   "h": 180,
+   "sha256": "4ca52f3ac9363075b5f784cef5a73fb4dc97e016b7ab65ae3a77f41d608a1200",
+   "w": 180
+  },
+  "icons/favicon-16.png": {
+   "bytes": 621,
+   "h": 16,
+   "sha256": "e1c80859cd6ce0aa71c44ef2993587216abdbd01e68d0cb7a6af02af2720fef9",
+   "w": 16
+  },
+  "icons/favicon-32.png": {
+   "bytes": 1477,
+   "h": 32,
+   "sha256": "3d5f2d7bf532ebed2865c60021dcc3884992e368eed834f30e52787f24246f24",
+   "w": 32
+  },
+  "icons/icon-1024.png": {
+   "bytes": 164179,
+   "h": 1024,
+   "sha256": "597a0fbfea532d105971b773a305e32855d094aff0870e5910ac4586f4522c60",
+   "w": 1024
+  },
+  "icons/icon-192.png": {
+   "bytes": 35168,
+   "h": 192,
+   "sha256": "ca2fb21208519a77460fa080ccf9fc9bf14d8c1c370e2554f27aa8af7283e9da",
+   "w": 192
+  },
+  "icons/icon-48.png": {
+   "bytes": 3867,
+   "h": 48,
+   "sha256": "5a67682c082580b23b82fd625fab9fcc967da9e699b488fde218d604a9f57aa8",
+   "w": 48
+  },
+  "icons/icon-512.png": {
+   "bytes": 72147,
+   "h": 512,
+   "sha256": "cfc487812388ea93c164877ca66cb3503fa492804b87a21a61afeacec2dbdd20",
+   "w": 512
+  },
+  "icons/icon-96.png": {
+   "bytes": 11575,
+   "h": 96,
+   "sha256": "76e1366b9c68084070dfecc318ea9c5d4e1356c52947f8c1e6d950a141bab0ab",
+   "w": 96
+  },
+  "icons/icon-maskable-512.png": {
+   "bytes": 60304,
+   "h": 512,
+   "sha256": "00177848d79ae861b1d80566496619769301290f5067f4a8ba0d6e8a14ec0d8b",
+   "w": 512
+  }
+ },
+ "font": "Hiragino Sans GB.ttc#2 cjk=True",
+ "generator": "assets/gen/make_art.py",
+ "pillow": "11.3.0",
+ "seed": 20260930
+}

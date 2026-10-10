@@ -1,0 +1,46 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # No bundler: the game ships plain ES modules, so the site is a file copy. Which files
+      # is no longer written here — tools/assemble-site.sh is the single list, and the local
+      # gate runs that same script. The old comment claimed "only these three paths are
+      # reachable from index.html", which was simply untrue: index.html also reaches
+      # manifest.webmanifest, js/sw-register.js, icons/*, and CSS reaches
+      # assets/textures/night-field.png. Those 404'd in production while every in-repo gate
+      # stayed green, because nothing ever loaded the artifact.
+      - name: Assemble static site
+        run: bash tools/assemble-site.sh _site
+      - name: Deploy set matches what the page asks for
+        run: node tools/deploy-set.mjs _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

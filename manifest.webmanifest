@@ -1,0 +1,40 @@
+{
+  "id": "./",
+  "name": "明路 · Akari 灯塔推理",
+  "short_name": "明路",
+  "description": "Akari 灯塔谜题：每局唯一解、每局都能用逻辑推到底，提示只给可推导的格。",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#080B16",
+  "theme_color": "#080B16",
+  "categories": ["games", "puzzle"],
+  "icons": [
+    { "src": "icons/favicon-16.png", "sizes": "16x16", "type": "image/png", "purpose": "any" },
+    { "src": "icons/favicon-32.png", "sizes": "32x32", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-48.png", "sizes": "48x48", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" }
+  ],
+  "screenshots": [
+    {
+      "src": "assets/og/akari-og-1200x630.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "明路 · 夜色棋盘上的一盏灯"
+    }
+  ],
+  "shortcuts": [
+    { "name": "继续上一局", "short_name": "继续", "url": "./index.html#resume", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "新手档开一局", "short_name": "新手", "url": "./index.html#tier=trainee", "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}
