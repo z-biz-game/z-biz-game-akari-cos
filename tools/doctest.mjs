@@ -31,7 +31,7 @@ const lineCount = (p) => lines(read(p));
 
 // 本闸的自钉（D16 与 verify.sh 的 LOGIC_EXPECTS 都读这两个数）：改一项就要改这里，否则红。
 const EXPECT_GROUPS = 16;
-const EXPECT_ROWS = 174; // 首次跑出来是多少就是多少，之后由它守体量
+const EXPECT_ROWS = 175; // 首次跑出来是多少就是多少，之后由它守体量
 
 const fail = [];
 const emitted = new Set();
@@ -353,6 +353,14 @@ const soundEffects = [...synthBlock.matchAll(/^  (\w+)\(\) \{/gm)].map((m) => m[
 const docSfx = (README.match(/js\/audio\/synth\.js\s+([一二三四五六七八九十])个合成音效/) || [])[1];
 ok(!!docSfx && CN[docSfx] === soundEffects.length, `D9k README 目录那句「${docSfx || '?'}个合成音效」== synth.js 的 Sound 现在导出的 ${soundEffects.length} 个音效`,
   `文档 ${CN[docSfx] || '?}'} vs 代码 ${soundEffects.length}（${soundEffects.join('/')}）`);
+// 判胜口径：README 写的那几条 == 代码 checkWin 真正查的那几条。
+// 铅笔叉是玩家的笔记、不参与判胜——这一条守着别再把"每格都要落定"塞回判胜条件里，
+// 那正是这一轮修掉的那个 bug：只放灯、从不画叉的正常玩法因此永远等不到胜利遮罩。
+const winDoc = README.match(/判胜只看这三条：(.+?)。/) || [];
+const winBody = (read('js/ui/game.js').match(/checkWin\(\) \{([\s\S]*?)\n  \}/) || [])[1] || '';
+ok(winDoc.length === 2 && /铅笔叉/.test(winDoc[1]) && /verify\(/.test(winBody) && !/OPEN/.test(winBody),
+  `D9l README 的判胜口径「${winDoc[0] || '解析不到'}」== game.js 的 checkWin 现值（查 verify，不查每格落定）`,
+  winBody.replace(/\s+/g, ' ').trim().slice(0, 90) || 'checkWin 没解析到');
 
 // ---- D10 符号锚点：文档为某个文件写的 `file:NN` 必须坐在该符号现在的行上 ----
 function lineOfAt(file, re) {

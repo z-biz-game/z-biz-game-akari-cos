@@ -70,6 +70,69 @@ const clock = () => baseElapsed + (startedAt ? Date.now() - startedAt : 0);
 const running = () => !!startedAt;
 const markDirty = () => { needsRedraw = true; };
 
+// ---- 语义化事件 ----
+//
+// 一次动作一个名字，反馈只从这张表里取：不做"分数变了就响一下"那种旁路触发。
+// 事件要能重复触发——每个音效都现建一个振荡器、每段画面都现建一批粒子，
+// 所以连点两下是响两下、闪两下，而不是第二次没反应。
+const GameEvent = {
+  place: 'place',         // 放下一盏灯
+  pencil: 'pencil',       // 落一个铅笔叉
+  erase: 'erase',         // 擦掉一个记号
+  undo: 'undo',           // 撤销一步
+  hint: 'hint',           // 要来一步提示
+  reject: 'reject',       // 无效落子：这一下没有落下去
+  conflict: 'conflict',   // 盘面出现矛盾
+  win: 'win',             // 收官
+  soundOn: 'soundOn',     // 把音效翻回开：一声确认
+};
+
+// 事件 → 声音。穷举的一张表，不留"默认没声音"的洞。
+const EVENT_SOUND = {
+  [GameEvent.place]: () => Sound.bulb(),
+  [GameEvent.pencil]: () => Sound.pencil(),
+  [GameEvent.erase]: () => Sound.erase(),
+  [GameEvent.undo]: () => Sound.undo(),
+  [GameEvent.hint]: () => Sound.hint(),
+  [GameEvent.reject]: () => Sound.reject(),
+  [GameEvent.conflict]: () => Sound.conflict(),
+  [GameEvent.win]: () => Sound.win(),
+  [GameEvent.soundOn]: () => Sound.bulb(),
+};
+
+// 事件的唯一出口：画面先走 fx，声音后走 Sound。这个顺序是原来逐处调用时就有的
+// （粒子先起、音才响），集中到这里之后顺序不变，只是从此只有一处说了算。
+function fire(event, payload = {}) {
+  switch (event) {
+    case GameEvent.place:
+      for (const w of payload.writes || []) {
+        const q = view.cellPos(w.cell);
+        fx.pop(w.cell, q.x, q.y);
+      }
+      break;
+    case GameEvent.pencil:
+      for (const w of payload.writes || []) {
+        const q = view.cellPos(w.cell);
+        fx.dust(w.cell, q.x, q.y);
+      }
+      break;
+    case GameEvent.hint:
+      fx.setPulse(payload.cells || []);
+      break;
+    case GameEvent.reject:
+      fx.reject(payload.cell == null ? -1 : payload.cell);
+      break;
+    case GameEvent.win:
+      fx.celebrate(payload.points || []);
+      break;
+    default:
+      break;
+  }
+  const sound = EVENT_SOUND[event];
+  if (sound) sound();
+  return event;
+}
+
 function fmtMs(ms) {
   const s = Math.floor(ms / 1000);
   return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
@@ -183,9 +246,8 @@ function showHint(info) {
   }
   el.hintRule.textContent = `规则：${info.rule}`;
   el.hintLine.textContent = `${Engine.at(game.w, info.cells[0])}${info.cells.length > 1 ? ` 等 ${info.cells.length} 格` : ''} — ${info.why}`;
-  fx.setPulse(info.cells);
   markDirty();
-  Sound.hint();
+  fire(GameEvent.hint, { cells: info.cells });
 }
 
 function onWin() {
@@ -204,20 +266,21 @@ function onWin() {
   el.winVeil.hidden = false;
   const points = [];
   for (const c of game.board.lightable) if (game.board.open[c] === BULB) points.push(view.cellPos(c));
-  fx.celebrate(points);
-  Sound.win();
+  fire(GameEvent.win, { points });
   renderRecords();
   markDirty();
 }
 
-function afterStep(soundKey) {
+function afterStep(event, payload = {}) {
   syncAll();
-  if (game.status === 'won') onWin();
-  else {
-    flushResume();
-    if (soundKey) Sound[soundKey]();
-    if (game.diag.conflict.size) Sound.conflict();
+  if (game.status === 'won') {
+    // 收官有自己的声音与光：这一下不再走落子的那一声。
+    onWin();
+    return;
   }
+  flushResume();
+  if (event) fire(event, payload);
+  if (game.diag.conflict.size) fire(GameEvent.conflict);
 }
 
 function useHint() {
@@ -240,10 +303,15 @@ function useHint() {
 function undo() {
   if (!game || paused) return null;
   const step = game.undo();
-  if (!step) return null;
+  if (!step) {
+    // 收官之后没有可撤销的东西（'won' 是终态，与落子、提示、暂停一致），或者这一局一步都没走。
+    // 这一下也要说得出来：拒绝音 + 盘面抖一下。
+    reject(-1);
+    return null;
+  }
   fx.pulse = null;
   markDirty();
-  Sound.undo();
+  fire(GameEvent.undo);
   syncAll();
   flushResume();
   return step;
@@ -259,6 +327,9 @@ function begin({ tier = 'trainee', seed = null, resume = null } = {}) {
   fx.reset();
   paused = false;
   el.pauseVeil.hidden = true;
+  // 上一局的结算遮罩也要收起来。原来这里只收了暂停遮罩，于是赢过之后点「再来一局」，
+  // 新盘上仍然盖着那张"整片亮了"——遮罩挡住画布，这一局直接没法玩。
+  el.winVeil.hidden = true;
   el.viewGame.classList.remove('paused');
   el.pause.setAttribute('aria-pressed', 'false');
   el.pause.textContent = '暂停';
@@ -419,10 +490,24 @@ function unpreview() {
   game.recompute();
 }
 
+// 一次无效落子：点在墙上、点在线索格上，或者撤销时已经无处可撤。
+// 这一下要能被感知（那格闪红 + 盘面抖一下 + 一声拒绝音），但不得计入步数、分数或
+// 撤销栈——所以它只碰画面层与声音层，一个字都不写进 engine。
+function reject(cell) {
+  fire(GameEvent.reject, { cell });
+  markDirty();
+  return cell;
+}
+
 function strokeStart(ev) {
   if (!game || game.status === 'won' || paused || helpOpen) return;
   const c = view.hitTest(ev.clientX, ev.clientY);
-  if (c < 0 || !game.isLightable(c)) return;
+  // 盘外留白不是落子（留白故意不属于棋盘），墙与线索格才是被拒绝的那一下。
+  if (c < 0) return;
+  if (!game.isLightable(c)) {
+    reject(c);
+    return;
+  }
   ev.preventDefault();
   el.canvas.setPointerCapture?.(ev.pointerId);
   const want = game.valueFor(game.mode);
@@ -453,13 +538,9 @@ function strokeEnd() {
     return null;
   }
   // 落子的反馈来自这一层，不参与判定：引擎说改了什么，这里只负责让人看见。
-  for (const w of step.writes) {
-    const q = view.cellPos(w.cell);
-    if (s.value === BULB) fx.pop(w.cell, q.x, q.y);
-    else fx.dust(w.cell, q.x, q.y);
-  }
+  const event = s.value === BULB ? GameEvent.place : s.value === MARK ? GameEvent.pencil : GameEvent.erase;
   markDirty();
-  afterStep(s.value === BULB ? 'bulb' : s.value === MARK ? 'pencil' : 'erase');
+  afterStep(event, { writes: step.writes });
   return step;
 }
 
@@ -600,7 +681,7 @@ function setHelp(next) {
 function toggleMute() {
   Store.setSetting('sound', !Store.setting('sound'));
   applySettings();
-  if (Store.setting('sound')) Sound.bulb();
+  if (Store.setting('sound')) fire(GameEvent.soundOn);
   return !!Store.setting('sound');
 }
 
@@ -753,8 +834,17 @@ window.akari = {
   }),
   tap(c, mode) {
     if (!game || paused) return null;
+    // 墙与线索格放不下灯：这一下要被拒绝掉，而且不能记账。
+    if (!game.isLightable(c)) {
+      reject(c);
+      return null;
+    }
     const step = mode === undefined ? game.tap(c) : game.tap(c, mode);
-    if (step) afterStep(step.writes[0].to === BULB ? 'bulb' : step.writes[0].to === MARK ? 'pencil' : 'erase');
+    if (step) {
+      const to = step.writes[0].to;
+      const event = to === BULB ? GameEvent.place : to === MARK ? GameEvent.pencil : GameEvent.erase;
+      afterStep(event, { writes: step.writes });
+    }
     return step;
   },
   solveWithLogic() {

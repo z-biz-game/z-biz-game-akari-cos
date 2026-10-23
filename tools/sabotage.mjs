@@ -135,7 +135,7 @@ const KNIVES = [
   },
   {
     id: 'K15', group: 'D16', file: 'tools/doctest.mjs',
-    from: 'const EXPECT_ROWS = 174;', to: 'const EXPECT_ROWS = 173;',
+    from: 'const EXPECT_ROWS = 175;', to: 'const EXPECT_ROWS = 174;',
     breaks: '把本闸自己钉的项数悄悄改小 1（删一条断言不改锁，就是这一把的形状）',
     assert: /^.*FAIL .*D16b 本闸项数.*$/m,
     rc: '1',

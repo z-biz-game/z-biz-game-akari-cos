@@ -96,6 +96,11 @@ export const Sound = {
     tone({ f0: 200, f1: 150, dur: 0.16, type: 'sawtooth', gain: 0.11 });
     tone({ f0: 214, f1: 158, dur: 0.16, type: 'sawtooth', gain: 0.09, delay: 0.01 });
   },
+  // 一次无效落子：闷、短、不刺耳。和"两盏灯打架"那种刺耳的冲突音是两件事——
+  // 这一声说的是"这一下没有落下去"，不是"你摆错了"。
+  reject() {
+    tone({ f0: 170, f1: 120, dur: 0.08, type: 'triangle', gain: 0.08 });
+  },
   hint() {
     tone({ f0: 760, f1: 1020, dur: 0.16, type: 'sine', gain: 0.16 });
     tone({ f0: 1140, dur: 0.1, type: 'sine', gain: 0.07, delay: 0.06 });

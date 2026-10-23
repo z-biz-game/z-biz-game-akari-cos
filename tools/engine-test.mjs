@@ -290,6 +290,58 @@ const clueArray = (n, pairs) => {
   ok('每一步提示都写了格', g.state().hints > 0);
 }
 
+{
+  // 正常玩法：只放灯，从不画铅笔叉。铅笔叉是玩家自己的笔记，规则里没有"每格都要画叉"这一条，
+  // 所以这一局必须判胜——旧代码在这里多要求了一步"每格都落定"，于是这种玩法永远收不了官。
+  const p = makePuzzle('unit|bulbs-only', 'apprentice');
+  const g = new Game(p);
+  const sol = createBoard(p.w, p.h, p.wall, Int8Array.from(p.clue));
+  solve(sol);
+  const lamps = [];
+  for (const c of sol.lightable) if (sol.open[c] === BULB) lamps.push(c);
+  ok('这一盘有灯可放', lamps.length > 0, String(lamps.length));
+  for (const c of lamps) g.setCell(c, BULB);
+  eq('只放灯不画叉，盘面独立检查无话可说', verify(g.board).length, 0);
+  ok('只放灯不画叉时仍有空格没落定', g.state().open > 0, String(g.state().open));
+  eq('只放灯不画叉也判胜', g.checkWin(), true);
+  eq('判胜之后状态是 won', g.status, 'won');
+}
+
+{
+  // 收官是终态：撤销不能把"赢了"这件事撤成一半——盘面不是那一局了，遮罩却还挂着"整片亮了"。
+  const p = makePuzzle('unit|terminal', 'apprentice');
+  const g = new Game(p);
+  g.solveWithLogic();
+  eq('推完之后是终态', g.status, 'won');
+  const snapshot = Array.from(g.board.open).join('');
+  const steps = g.state().steps;
+  eq('收官之后撤销不受理', g.undo(), null);
+  eq('收官之后撤销不改盘面', Array.from(g.board.open).join(''), snapshot);
+  eq('收官之后撤销不退步数', g.state().steps, steps);
+}
+
+{
+  // 收官之后，剩下那些没落定的格子也放不下灯了：再塞一盏进去，独立检查必须立刻报出问题。
+  // 这一条是"这盘已经赢了"的真正含义——它比"全盘没有未定格"贴近规则，因为规则并不要求每格画叉。
+  const p = makePuzzle('unit|settled', 'regular');
+  const g = new Game(p);
+  g.solveWithLogic();
+  eq('推完之后是终态', g.status, 'won');
+  const snapshot = g.board.open.slice();
+  let canStillTake = -1;
+  for (const c of g.board.lightable) {
+    if (g.board.open[c] !== OPEN) continue;
+    g.board.open[c] = BULB;
+    const bad = verify(g.board).length;
+    g.board.open.set(snapshot);
+    if (!bad) {
+      canStillTake = c;
+      break;
+    }
+  }
+  eq('收官之后没有哪一格还能再放下一盏灯', canStillTake, -1);
+}
+
 // ---------- storage: the run's cost travels with the board ----------
 
 {

@@ -14,7 +14,7 @@
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
   盯的兑现是 `balance` 的**退出码**：`npm run doctest` 的 D3a（CI 里的那一步）只认这个码，不认它打印了什么句子。
-- 规模：14 个 ES Module / 2,846 行 JS + 10 个验证脚本 / 3,096 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 3,014 行 JS + 10 个验证脚本 / 3,205 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -29,17 +29,17 @@ npm run electron     # 桌面壳（electron/main.cjs，同一份代码）
 
 ```bash
 npm run check        # 逐文件 node --check 语法门禁
-npm test             # 引擎断言 77 项：规则可靠性 / 生成保证 / 状态机 / 存档形状
+npm test             # 引擎断言 88 项：规则可靠性 / 生成保证 / 状态机 / 存档形状
 npm run balance      # 难度实测台：每档分数分位、入选率、求解代价、档位阶梯门禁（四段结论任一红就 rc=1）
 npm run verify       # 无头 Chrome 跑 8 个浏览器场景（需本机 Chrome，见下）
 ```
 
-`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 188 项断言）：
+`npm run verify` 自己起服务、自己开 Chrome、自己收尾，退出码即结论（共 196 项断言）：
 
 ```
 === engine ===   14 checks, 0 failed   {tier: apprentice, score: 12.3}
 === gen ===      39 checks, 0 failed   {perTier: {trainee: 7.3, apprentice: 13.4, regular: 17.7, expert: 22.8, master: 32.1}}
-=== play ===     29 checks, 0 failed   {cells: 64, hints: 26}
+=== play ===     37 checks, 0 failed   {cells: 64, hints: 26}
 === hint ===     16 checks, 0 failed   {boards: 3, hintsGiven: 90, boardsClearedByHints: 3}
 === save ===     20 checks, 0 failed   {storedBytes: 260}
 === resume ===   18 checks, 0 failed   {name: 灯下尽头, tier: apprentice}
@@ -64,6 +64,8 @@ BASE_URL=https://z-biz-game.github.io/z-biz-game-akari-cos/ npm run verify
 | 点在已有的记号上 | 擦掉它——同一条规则同时管两种模式，不用记两套手势 |
 | 按住拖过若干格 | 一笔铺满这条线，**算一步**：撤销退的是整笔，不是半笔 |
 | 切「画叉」 | 铅笔叉：这里放不下灯。叉**不挡光**，被划掉的格照样要被照亮 |
+| 点在墙或线索格上 | 放不下：那一格闪红、盘面抖一下、响一声拒绝音——**不记步数、不进撤销栈** |
+| 收官之后再按 `Z` | 这一局已经收了：撤销不受理（与落子、提示、暂停同一条规矩），响一声拒绝 |
 | `H` / `Z` / `M` | 提示 / 撤销 / 切换模式 |
 
 规则口径（写错任何一条，整个盘面判断都会崩，所以它们同时是 `tools/engine-test.mjs` 的断言）：
@@ -73,6 +75,11 @@ BASE_URL=https://z-biz-game.github.io/z-biz-game-akari-cos/ npm run verify
 3. 墙上数字 = 它四邻的灯数，**多一个也不行**；
 4. 一条线**不要求**有自己的灯——线上的格可以被横着的灯照亮；
 5. 铅笔叉是玩家自己的笔记，对灯光是透明的。
+
+判胜只看这三条：线索数对上、同线不双灯、每格都被照亮；铅笔叉是你自己的笔记，不参与判胜。
+所以**只放灯、从不画叉**也是一盘完整的 Akari——把灯摆对、把盘照亮，胜利遮罩就会出现。
+（这一条同时是 `tools/engine-test.mjs` 的断言：旧代码在判胜前多要求了一步"每格都要落定"，
+于是只放灯的正常玩法永远等不到收官。）
 
 ---
 
@@ -117,7 +124,7 @@ js/ui/game.js         状态机：点击 / 一笔 / 撤销 / 提示 / 判胜
 js/render/board.js    布局 + 命中测试 + canvas 绘制
 js/render/fx.js       灯亮的绽放、提示的呼吸脉冲、放灯与收官的光尘
 js/render/sheets.js   位图资产加载器：图没到之前画矢量版本，到了之后换成图
-js/audio/synth.js     七个合成音效
+js/audio/synth.js     八个合成音效
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
 js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）
@@ -159,13 +166,13 @@ tools/deploy-set-selftest.mjs  部署集闸的阴性自证（每一类断言当�
 上面每一处数字都由 `tools/doctest.mjs` 现算对表：档位与 band 读 `js/engine/generate.js:15-21` 的 `TIERS`
 现值，六条铅笔规则读 `js/engine/akari.js:19-26` 的 `Rules` 现值，成组枚举上限读 `js/engine/akari.js:214`
 那一行的 `open.length > 12`，分位与入选是现场跑一遍 `tools/balance.mjs`（每档张数由
-`tools/balance.mjs:13` 的 `SAMPLES` 决定），77 项引擎断言是现场跑一遍 `tools/engine-test.mjs`，
+`tools/balance.mjs:13` 的 `SAMPLES` 决定），88 项引擎断言是现场跑一遍 `tools/engine-test.mjs`，
 端口对 `tools/verify.sh:17` 与 `package.json` 的 dev，CI 的接线对 `.github/workflows/ci.yml:29-30`
 （同一个 check job 里 35–39 行就是这两道文档闸自己的步骤；这两处行号刚跟着一次接线搬家——
 `Syntax check every source` 那一步以前自己抄了 5 行 `git ls-files` 循环，现在只剩 `run: npm run check`
 一行，与本地同一条命令，于是下面所有步骤整体上移 5 行）。**代码是真相**：文档与代码不一致时改文档，不许把断言改松。
 
-- 本闸 16 组 / 174 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
+- 本闸 16 组 / 175 项等式的体量自钉在 `tools/doctest.mjs:33-34`（`EXPECT_GROUPS` / `EXPECT_ROWS`）：
   明天删掉 20 条断言，`rc=0` 也救不了这一行——闸变窄就是红。`tools/verify.sh` 的 `LOGIC_EXPECTS` 钉的是
   同一组数，两处必须一致。
 - `tools/sabotage.mjs:33` 的破坏试验台账（16 把刀）把「文档抄了一个已经不存在的数」逐类塞回代码，doctest 的 16 个组一组一把：

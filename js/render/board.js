@@ -87,7 +87,13 @@ export class BoardView {
     // 于是同一虚拟时刻在任何刷新率下画出同一张图。
     const breath = fx ? fx.breath() : 1;
     const win = fx ? fx.win : 0;
-    ctx.clearRect(0, 0, geo.w, geo.h);
+    // 多清一圈：抖动的位移最多 4px，只清画布那一块就会拖出一条上一帧的残影。
+    ctx.clearRect(-12, -12, geo.w + 24, geo.h + 24);
+    // 一次无效落子会让整张盘抖一下。位移来自 fx 的仿真钟，同一虚拟时刻在任何刷新率下
+    // 落在同一个像素上。
+    const shake = fx ? fx.shakeOffset() : { x: 0, y: 0 };
+    ctx.save();
+    if (shake.x || shake.y) ctx.translate(shake.x, shake.y);
 
     roundRect(ctx, 0, 0, geo.w, geo.h, Radius.card);
     ctx.fillStyle = Palette.surface;
@@ -211,6 +217,22 @@ export class BoardView {
       ctx.fill();
     }
 
+    // 无效落子的那一格：闪一下红。这是不该发生的那一下的视觉通道，
+    // 省动效时它也是唯一剩下的那一个（抖动属于位移，会被关掉）。
+    if (fx) {
+      for (let c = 0; c < b.n; c++) {
+        const a = fx.flashOf(c);
+        if (a <= 0) continue;
+        const r = this.cellRect(c);
+        ctx.save();
+        ctx.globalAlpha = a * 0.5;
+        ctx.fillStyle = Palette.error;
+        roundRect(ctx, r.x + 1, r.y + 1, cell - 2, cell - 2, Radius.cell);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
     // 提示点名的那几格：描边随脉冲寿命淡出。它是盖在引擎已知状态上的一层临时画法。
     const pulse = fx ? fx.pulse : null;
     if (pulse && pulse.cells.length) {
@@ -263,6 +285,7 @@ export class BoardView {
       ctx.fill();
       ctx.restore();
     }
+    ctx.restore();
   }
 }
 

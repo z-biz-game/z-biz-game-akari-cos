@@ -65,6 +65,22 @@
 
   const boardOf = (p) => E().createBoard(p.w, p.h, p.wall, Int8Array.from(p.clue));
   const solutionCells = (p) => p.solution.reduce((a, v, i) => (v && a.push(i), a), []);
+
+  // 收官之后，剩下那些没落定的格子也放不下灯了：再往里塞一盏，独立检查必须立刻报出问题。
+  // 这是"这一盘已经赢了"的真正含义，比"全盘没有未定格"贴近规则——
+  // 规则里没有"每格都要画叉"这一条，铅笔叉只是玩家自己的笔记。
+  const noCellTakesABulb = (board, verify) => {
+    const { OPEN, BULB } = E();
+    const snapshot = board.open.slice();
+    for (const c of board.lightable) {
+      if (board.open[c] !== OPEN) continue;
+      board.open[c] = BULB;
+      const bad = verify(board).length;
+      board.open.set(snapshot);
+      if (!bad) return false;
+    }
+    return true;
+  };
   const median = (arr) => {
     const a = arr.slice().sort((x, y) => x - y);
     return a.length % 2 ? a[(a.length - 1) / 2] : (a[a.length / 2 - 1] + a[a.length / 2]) / 2;
@@ -212,6 +228,13 @@
 
     await tapCell(wallCell);
     ck('点墙不落灯也不记账', g.state().moves === 2 && g.board.open[wallCell] === OPEN, g.state().moves);
+    // 无效落子要被感知：那一格闪红、整张盘抖一下、还有一声拒绝音——
+    // 但它一个字节都不许写进盘面、步数或撤销栈。
+    ck('点墙有拒绝的视觉反馈（那格闪一下）', A().fx.flashOf(wallCell) > 0, String(A().fx.flashOf(wallCell)));
+    const shake = A().fx.shakeOffset();
+    ck('点墙有拒绝的盘面抖动', Math.abs(shake.x) > 0 || Math.abs(shake.y) > 0, JSON.stringify(shake));
+    ck('点墙之后盘面依旧是空的', g.board.open[wallCell] === OPEN && g.state().moves === 2,
+      `open=${g.board.open[wallCell]} moves=${g.state().moves}`);
 
     document.querySelector('#btn-mode-mark').click();
     ck('切到画叉模式', g.mode === 'mark' && document.querySelector('#btn-mode-mark').getAttribute('aria-pressed') === 'true');
@@ -267,13 +290,39 @@
     await wait(30);
     ck('纯逻辑推到底判胜', g.status === 'won' && shown('#win-veil'), JSON.stringify(g.state()));
     ck('胜利时独立检查无话可说', verify(g.board).length === 0, verify(g.board).join('; '));
-    ck('胜利时全盘没有未定格', g.state().open === 0 && g.state().unlit === 0);
+    // "这盘已经赢了"的真正含义：没有哪一格还能再放下一盏灯。
+    // 这一条替掉的是旧的"全盘没有未定格"——铅笔叉是玩家的笔记，规则并不要求每格都画叉，
+    // 而提示推到底时最后剩下的往往正是那些还没画叉的空格。
+    ck('胜利时没有哪一格还能再放下一盏灯', g.state().unlit === 0 && noCellTakesABulb(g.board, verify),
+      `unlit=${g.state().unlit}`);
     ck('胜利面板写出了这一局的成本', document.querySelector('#win-meta').textContent.includes('提示'),
       document.querySelector('#win-meta').textContent);
     const veil = document.querySelector('#win-veil').getBoundingClientRect();
     const box = A().view.canvas.getBoundingClientRect();
     ck('结算遮罩盖住整张盘', veil.width >= box.width - 1 && veil.height >= box.height - 1,
       `${Math.round(veil.width)}×${Math.round(veil.height)} vs ${Math.round(box.width)}×${Math.round(box.height)}`);
+
+    // 收官是终态：撤销不受理，盘面不动。
+    const wonInk = Array.from(g.board.open).join('');
+    const wonSteps = g.state().steps;
+    A().undo();
+    ck('收官之后撤销不受理', g.status === 'won' && Array.from(g.board.open).join('') === wonInk
+      && g.state().steps === wonSteps, `${g.status} / ${g.state().steps}`);
+
+    // 「再来一局」必须把上一局的结算遮罩收起来：不收的话，新盘上仍然盖着"整片亮了"，
+    // 遮罩挡住画布，这一局直接没法玩。
+    A().begin({ tier: 'apprentice', seed: 'browser|again' });
+    await wait(30);
+    ck('再来一局收起了上一局的结算遮罩', !shown('#win-veil'), '遮罩还盖在新盘上');
+    ck('再来一局之后是一张空盘', A().game.state().open > 0 && A().game.state().bulbs === 0,
+      JSON.stringify(A().game.state()));
+
+    // 只放灯、从不画叉——Akari 的正常玩法——必须收官。
+    // 旧代码在判胜前多要求"每格都落定"，于是这种玩法永远等不到胜利遮罩。
+    const p2 = A().game.puzzle;
+    for (const c of solutionCells(p2)) await tapCell(c);
+    ck('只放灯不画叉也判胜', A().game.status === 'won' && shown('#win-veil'), JSON.stringify(A().game.state()));
+    ck('只放灯不画叉时独立检查无话可说', verify(A().game.board).length === 0, verify(A().game.board).join('; '));
     return report({ cells: p.w * p.h, hints: g.hints, moves: g.moves });
   };
 

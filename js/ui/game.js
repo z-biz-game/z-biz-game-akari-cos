@@ -145,6 +145,10 @@ export class Game {
   }
 
   undo() {
+    // 收官是终态。落子、提示、暂停、手势在 status==='won' 时都不再受理，撤销也一样：
+    // 否则 Z 会把最后一盏灯摘掉，盘面已经不是那一局，遮罩却还挂着"整片亮了"，
+    // 而分数与纪录已经记进存档——撤不回来的假账。
+    if (this.status === 'won') return null;
     const step = this.steps.pop();
     if (!step) return null;
     for (const w of step.writes) this.board.open[w.cell] = w.from;
@@ -182,12 +186,18 @@ export class Game {
     return info;
   }
 
+  // 胜利 = 这一盘满足这个游戏自己的规则。verify() 是照着规则写的独立检查，与这里的
+  // 簿记无关，所以"UI 说我赢了"和"盘面合法"不可能各说各话。
+  //
+  // 这里原来多了一条"每格都落定"的要求（每格要么是灯、要么是铅笔叉）。铅笔叉是玩家
+  // 自己的笔记——README 的规则口径与 index.html 的玩法页都写明它对灯光透明，规则只有
+  // "照亮每一个空格"——于是只放灯、从不画叉的正常玩法会把空格留在 OPEN 上，
+  // verify 说这盘合法，胜利遮罩却永远不出现。实测五档各三局，15/15 局都判不出胜。
+  //
+  // 判胜只看规则：线索数对上、同线不双灯、每格都被照亮——这三条 verify() 全查了。
   checkWin() {
     const bad = verify(this.board, this.diag.tally);
     if (bad.length) return false;
-    let left = 0;
-    for (const c of this.board.lightable) if (this.board.open[c] === OPEN) left++;
-    if (left) return false;
     this.status = 'won';
     return true;
   }
