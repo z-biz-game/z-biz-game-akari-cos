@@ -14,7 +14,7 @@
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
   盯的兑现是 `balance` 的**退出码**：`npm run doctest` 的 D3a（CI 里的那一步）只认这个码，不认它打印了什么句子。
-- 规模：14 个 ES Module / 3,014 行 JS + 10 个验证脚本 / 3,205 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：14 个 ES Module / 3,018 行 JS + 10 个验证脚本 / 3,205 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---

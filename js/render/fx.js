@@ -45,14 +45,14 @@ export class Fx {
     this.bloom = new Map();
     this.flash = new Map();
     this.pulse = null;
-    this.shakeT = 0;
+    this.shakeAt = -1;
     this.win = 0;
     this.rng = lcg(this.seed);
   }
 
   get dirty() {
     return this.parts.length > 0 || !!this.pulse || this.bloom.size > 0 || this.flash.size > 0
-      || this.shakeT > 0 || this.win > 0;
+      || this.shakeAt >= 0 || this.win > 0;
   }
 
   // 灯晕的呼吸：只要盘上有灯且没开省动效，就每帧都要重画。
@@ -76,22 +76,22 @@ export class Fx {
 
   step(dt) {
     this.time += dt;
-    // 闪光与倒计时在"省动效"分支之前跑：省动效关掉的是位移，不是"这一次落子被拒绝了"
-    // 这条信息。抖动属于位移，所以它在下面被直接掐掉。
+    // 闪光与抖动都挂在仿真钟上：它们的"多老"是 this.time 减去起点时刻，不是每步减一格。
+    // 逐格递减会让同一个墙钟时刻在 30/60/120Hz 上读到三个不同的值（落子的那一刻落在
+    // 仿真步格的哪一格里，三档不同），挂钟就没有这个偏差了。
     if (this.flash.size) {
-      for (const [cell, t] of this.flash) {
-        const next = t + dt;
-        if (next >= FLASH_DUR) this.flash.delete(cell);
-        else this.flash.set(cell, next);
+      for (const [cell, t0] of this.flash) {
+        if (this.time - t0 >= FLASH_DUR) this.flash.delete(cell);
       }
     }
-    if (this.shakeT > 0) this.shakeT = Math.max(0, this.shakeT - dt);
+    if (this.shakeAt >= 0 && this.time - this.shakeAt >= SHAKE_DUR) this.shakeAt = -1;
     if (this.reduced) {
       // 省动效不是"把动画调快"，是不跑它：粒子清空、脉冲与绽放立即结束。
+      // 闪光是颜色不是位移，所以它留在上面继续走——省动效下它是唯一的视觉通道。
       if (this.parts.length) this.parts.length = 0;
       this.pulse = null;
       this.bloom.clear();
-      this.shakeT = 0;
+      this.shakeAt = -1;
       this.win = 0;
       return;
     }
@@ -150,23 +150,27 @@ export class Fx {
   // 一次无效落子（点在墙上、点在线索格上）：那格闪一下，整张盘抖一下。
   // 闪光是省动效时唯一的视觉通道，所以它不受 reduced 影响；抖动是位移，受 reduced 管。
   reject(cell) {
-    if (cell >= 0) this.flash.set(cell, 0);
-    if (!this.reduced) this.shakeT = SHAKE_DUR;
+    if (cell >= 0) this.flash.set(cell, this.time);
+    if (!this.reduced) this.shakeAt = this.time;
     return this.flash.size;
   }
 
-  // 格子闪光的强度：0（不闪）到 1（刚被拒绝）。
+  // 格子闪光的强度：0（不闪）到 1（刚被拒绝）。只由仿真钟决定。
   flashOf(cell) {
-    const t = this.flash.get(cell);
-    if (t === undefined) return 0;
-    return 1 - t / FLASH_DUR;
+    const t0 = this.flash.get(cell);
+    if (t0 === undefined) return 0;
+    const age = this.time - t0;
+    if (age >= FLASH_DUR) return 0;
+    return 1 - age / FLASH_DUR;
   }
 
-  // 抖动的位移，单位是 CSS 像素。取自仿真钟而不是 Date.now()，
+  // 抖动的位移，单位是 CSS 像素。相位与衰减都取自仿真钟而不是 Date.now()，
   // 于是 30/60/120Hz 上同一时刻的抖动落点一致。
   shakeOffset() {
-    if (this.shakeT <= 0) return { x: 0, y: 0 };
-    const a = SHAKE_AMP * (this.shakeT / SHAKE_DUR);
+    if (this.shakeAt < 0) return { x: 0, y: 0 };
+    const age = this.time - this.shakeAt;
+    if (age >= SHAKE_DUR) return { x: 0, y: 0 };
+    const a = SHAKE_AMP * (1 - age / SHAKE_DUR);
     return { x: Math.sin(this.time * 47) * a, y: Math.cos(this.time * 61) * a * 0.55 };
   }
 
