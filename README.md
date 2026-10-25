@@ -14,7 +14,7 @@
 - 难度不是标签：`见习 → 大师` 五档的分数带由求解器**实测**得出（`npm run balance` 打印分位表），
   `TIERS` 里的 `band` 是**选取目标**——每档一直抽盘，直到分数落进自己的区间，`balance` 再盯着这件事不许漂移。
   盯的兑现是 `balance` 的**退出码**：`npm run doctest` 的 D3a（CI 里的那一步）只认这个码，不认它打印了什么句子。
-- 规模：14 个 ES Module / 3,018 行 JS + 10 个验证脚本 / 3,205 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
+- 规模：15 个 ES Module / 3,113 行 JS + 10 个验证脚本 / 3,205 行 + 758 行 CSS/HTML，**运行时依赖 0 个**。
 - **在线试玩**：<https://z-biz-game.github.io/z-biz-game-akari-cos/>（`main` 分支推送即自动部署）
 
 ---
@@ -125,6 +125,7 @@ js/render/board.js    布局 + 命中测试 + canvas 绘制
 js/render/fx.js       灯亮的绽放、提示的呼吸脉冲、放灯与收官的光尘
 js/render/sheets.js   位图资产加载器：图没到之前画矢量版本，到了之后换成图
 js/audio/synth.js     八个合成音效
+js/haptics.js         触觉分级（轻 8ms / 中 26ms / 重 [14,40,14]），带特性探测
 js/store.js           单键存档：设置 / 纪录 / 续局（游程编码）
 js/main.js            接线：DOM、手势、计时、window.akari
 js/sw-register.js     注册 Service Worker（离线可开；Pages 上刷新不丢局）

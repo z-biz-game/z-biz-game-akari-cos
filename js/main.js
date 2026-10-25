@@ -4,6 +4,7 @@
 
 import { applyThemeVars, setReduceMotion, systemPrefersReducedMotion } from './theme.js';
 import { Sound } from './audio/synth.js';
+import { haptics } from './haptics.js';
 import { Store } from './store.js';
 import { TIERS, tierById, makePuzzle } from './engine/generate.js';
 import * as Engine from './engine/akari.js';
@@ -100,8 +101,26 @@ const EVENT_SOUND = {
   [GameEvent.soundOn]: () => Sound.bulb(),
 };
 
-// 事件的唯一出口：画面先走 fx，声音后走 Sound。这个顺序是原来逐处调用时就有的
+// 事件 → 触觉档。触觉是第三路（视觉与听觉之外的那一路），档位只有三档：
+// 轻 tap 8ms / 中 correct 26ms / 重 wrong [14,40,14]（见 js/haptics.js 与 003 §0）。
+// 所以这一张表里的每一行都得说得出玩家语义——说不出就不接这一行。不造第四档，
+// 也不做"无差别 pointerdown 都震一下"那种垫片：没有分级的震动只是噪音，
+// 而且会把三档之间的差别节流掉。
+const EVENT_HAPTIC = {
+  [GameEvent.place]: () => haptics.tap(),       // 放下一盏灯：这一下真的落上去了
+  [GameEvent.pencil]: () => haptics.tap(),      // 落一个铅笔叉：这一笔落上去了
+  [GameEvent.erase]: () => haptics.tap(),       // 擦掉一个记号：盘面退了一格
+  [GameEvent.undo]: () => haptics.tap(),        // 撤销一步：盘面退了一步
+  [GameEvent.hint]: () => haptics.correct(),    // 引擎确认了一条当下成立的推理：谜题推进对了
+  [GameEvent.reject]: () => haptics.wrong(),    // 这一下没落下去（点在墙/线索格上）：玩家的落子是错的
+  [GameEvent.conflict]: () => haptics.wrong(),  // 盘面出现矛盾：同线两盏灯，或线索被超过
+  [GameEvent.win]: () => haptics.wrong(),       // 收官：只有三档，胜利归最重的那一档
+  [GameEvent.soundOn]: () => haptics.tap(),     // 把音效翻回开：这一按生效了
+};
+
+// 事件的唯一出口：画面先走 fx，声音后走 Sound，这个顺序是原来逐处调用时就有的
 // （粒子先起、音才响），集中到这里之后顺序不变，只是从此只有一处说了算。
+// 触觉接在最后：它是补路不是主路，视觉与听觉先到位。
 function fire(event, payload = {}) {
   switch (event) {
     case GameEvent.place:
@@ -130,6 +149,8 @@ function fire(event, payload = {}) {
   }
   const sound = EVENT_SOUND[event];
   if (sound) sound();
+  const haptic = EVENT_HAPTIC[event];
+  if (haptic) haptic();
   return event;
 }
 

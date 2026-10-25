@@ -617,8 +617,8 @@
 
   // ---------- pause ----------
   //
-  // #btn-pause（盘边 .acts 上）和 #btn-fullscreen（顶栏上）都是真的控件：js/main.js:140 有一套
-  // 真停表，js/main.js:622 有一个真全屏开关，遮罩上写着「表停在这里，盘面也不接受落子」，卡上还写着
+  // #btn-pause（盘边 .acts 上）和 #btn-fullscreen（顶栏上）都是真的控件：js/main.js:224 有一套
+  // 真停表，js/main.js:724 有一个真全屏开关，遮罩上写着「表停在这里，盘面也不接受落子」，卡上还写着
   // 「按 P 或 空格 继续」。原先那七场一次都没点过这两颗按钮——上面这几句话在整个仓里没有一处代码
   // 为它们担保。这一场就是它们的台架。
   const pause = async () => {
@@ -737,7 +737,7 @@
     const frozen2 = await advance(300);
     ck('暂停：空格停住之后表同样是 0 推进（不是只按 P 才生效的半个暂停）', frozen2 === 0, `Δ=${frozen2}`);
 
-    // js/main.js:128-137 那句「复位到‘这一局还没开始过’」承诺的事，这里就是它的台架：带着暂停换一局，
+    // js/main.js:346 那句「复位到‘这一局还没开始过’」承诺的事，这里就是它的台架：带着暂停换一局，
     // begin 若不解暂停，界面会显示「已暂停」而表一动不动——按钮、遮罩与时钟各说各话，谁都不算红。
     const g2 = a.begin({ tier: 'trainee', seed: 'browser|pause-new' });
     await wait(80);
@@ -805,7 +805,7 @@
     window.removeEventListener('error', onErr);
     window.removeEventListener('unhandledrejection', onErr);
     const errsNow = errs.length;
-    ck('暂停：这一场没有未捕获异常/未处理 rejection（全屏被拒要由 js/main.js:633 的 catch 吃掉）',
+    ck('暂停：这一场没有未捕获异常/未处理 rejection（全屏被拒要由 js/main.js:734 的 catch 吃掉）',
       errsNow === 0, errs.slice(0, 3).join(' | '));
     return report({ fs, focus: document.hasFocus(), fsEnabled: document.fullscreenEnabled, frozen, frozen2, resumed, jump, afterNew: afterNew.moved, errs: errsNow });
   };
